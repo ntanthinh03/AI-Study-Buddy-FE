@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CopilotDiffPersistence">
+    <option name="pendingDiffs">
+      <map>
+        <entry key="/DataModels (snapshot).kt">
+          <value>
+            <PendingDiffInfo>
+              <option name="filePath" value="/DataModels (snapshot).kt" />
+              <option name="originalContent" value="package com.thinh.aistudybuddy.data.model&#10;&#10;import com.google.gson.annotations.SerializedName&#10;&#10;data class ChatRequest(&#10;    @SerializedName(&quot;message&quot;) val message: String&#10;)&#10;&#10;data class ChatResponse(&#10;    @SerializedName(&quot;answer&quot;) val answer: String&#10;)&#10;&#10;data class Document(&#10;    val id: String,&#10;    val name: String,&#10;    val size: Long,&#10;    val type: String,&#10;    val url: String&#10;)&#10;&#10;data class ChatMessage(&#10;    val id: String,&#10;    val content: String,&#10;    val isUser: Boolean,&#10;    val timestamp: Long&#10;)&#10;&#10;data class LoginResponse(&#10;    val token: String,&#10;    val user: UserProfile&#10;)&#10;&#10;data class RegisterResponse(&#10;    val message: String&#10;)&#10;&#10;data class UserProfile(&#10;    val id: String,&#10;    val email: String,&#10;    val nickname: String&#10;)&#10;&#10;data class Quiz(&#10;    val id: String,&#10;    val title: String,&#10;    val score: Int? = null&#10;)&#10;&#10;data class QuizQuestion(&#10;    val id: String,&#10;    val question: String,&#10;    val options: List&lt;String&gt;,&#10;    val correctAnswer: Int&#10;)" />
+              <option name="updatedContent" value="package com.thinh.aistudybuddy.data.model&#10;&#10;import com.google.gson.annotations.SerializedName&#10;&#10;data class Document(&#10;    val id: String,&#10;    val name: String,&#10;    val size: Long,&#10;    val type: String,&#10;    val url: String&#10;)&#10;&#10;data class ChatMessage(&#10;    val id: String,&#10;    val content: String,&#10;    val isUser: Boolean,&#10;    val timestamp: Long&#10;)&#10;&#10;data class LoginResponse(&#10;    val token: String,&#10;    val user: UserProfile&#10;)&#10;&#10;data class RegisterResponse(&#10;    val message: String&#10;)&#10;&#10;data class UserProfile(&#10;    val id: String,&#10;    val email: String,&#10;    val nickname: String&#10;)&#10;&#10;data class Quiz(&#10;    val id: String,&#10;    val title: String,&#10;    val score: Int? = null&#10;)&#10;&#10;data class QuizQuestion(&#10;    val id: String,&#10;    val question: String,&#10;    val options: List&lt;String&gt;,&#10;    val correctAnswer: Int&#10;)" />
+            </PendingDiffInfo>
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+</project>

@@ -19,6 +19,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Front-End Buddy"
+rootProject.name = "FE Buddy"
 include(":app")
  

@@ -1,4 +1,4 @@
-package com.example.front_endbuddy
+package com.thinh.aistudybuddy
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -11,21 +11,16 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
-import com.example.front_endbuddy.ui.theme.FrontEndBuddyTheme
+import androidx.navigation.compose.rememberNavController
+import com.thinh.aistudybuddy.ui.theme.AppNavigation
+import com.thinh.aistudybuddy.ui.theme.FEBuddyTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
         setContent {
-            FrontEndBuddyTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Greeting(
-                        name = "Android",
-                        modifier = Modifier.padding(innerPadding)
-                    )
-                }
-            }
+            val navController = rememberNavController()
+            AppNavigation(navController = navController)
         }
     }
 }
@@ -41,7 +36,7 @@ fun Greeting(name: String, modifier: Modifier = Modifier) {
 @Preview(showBackground = true)
 @Composable
 fun GreetingPreview() {
-    FrontEndBuddyTheme {
+    FEBuddyTheme {
         Greeting("Android")
     }
 }

@@ -1,4 +1,4 @@
-package com.example.front_endbuddy.ui.theme
+package com.thinh.aistudybuddy.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

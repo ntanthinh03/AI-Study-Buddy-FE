@@ -1,4 +1,4 @@
-package com.example.front_endbuddy
+package com.thinh.aistudybuddy
 
 import org.junit.Test
 

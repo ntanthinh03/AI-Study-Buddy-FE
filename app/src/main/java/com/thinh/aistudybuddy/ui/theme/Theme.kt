@@ -1,4 +1,4 @@
-package com.example.front_endbuddy.ui.theme
+package com.thinh.aistudybuddy.ui.theme
 
 import android.app.Activity
 import android.os.Build
@@ -34,7 +34,7 @@ private val LightColorScheme = lightColorScheme(
 )
 
 @Composable
-fun FrontEndBuddyTheme(
+fun FEBuddyTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     // Dynamic color is available on Android 12+
     dynamicColor: Boolean = true,

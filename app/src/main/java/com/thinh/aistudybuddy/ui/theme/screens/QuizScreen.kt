@@ -79,7 +79,7 @@ fun QuizScreen(
         }
 
         LinearProgressIndicator(
-            progress = { (currentIdx + 1).toFloat() / viewModel.sampleQuestions.size },
+            progress = { if (viewModel.questions.isNotEmpty()) (currentIdx + 1).toFloat() / viewModel.questions.size else 0f },
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 16.dp)
@@ -88,33 +88,35 @@ fun QuizScreen(
             trackColor = Color(0xFF2C2C2E)
         )
 
-        Text(
-            text = viewModel.currentQuestion.question,
-            color = Color.White,
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Medium
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        viewModel.currentQuestion.options.forEachIndexed { index, option ->
-            QuizOptionItem(
-                label = option,
-                isSelected = viewModel.userAnswers[currentIdx] == index,
-                isCorrect = index == viewModel.currentQuestion.correctAnswerIndex,
-                showResult = isSubmitted,
-                onClick = { viewModel.selectOption(index) }
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-        }
-
-        if (isSubmitted) {
+        if (viewModel.questions.isNotEmpty()) {
             Text(
-                text = "Explanation: ${viewModel.currentQuestion.explanation}",
-                color = Color(0xFF4CAF50),
-                fontSize = 14.sp,
-                modifier = Modifier.padding(top = 16.dp)
+                text = viewModel.currentQuestion.question,
+                color = Color.White,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Medium
             )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            viewModel.currentQuestion.options.forEachIndexed { index, option ->
+                QuizOptionItem(
+                    label = option,
+                    isSelected = viewModel.userAnswers[currentIdx] == index,
+                    isCorrect = index == viewModel.currentQuestion.correctAnswerIndex,
+                    showResult = isSubmitted,
+                    onClick = { viewModel.selectOption(index) }
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            if (isSubmitted) {
+                Text(
+                    text = "Explanation: ${viewModel.currentQuestion.explanation}",
+                    color = Color(0xFF4CAF50),
+                    fontSize = 14.sp,
+                    modifier = Modifier.padding(top = 16.dp)
+                )
+            }
         }
 
         Spacer(modifier = Modifier.weight(1f))
@@ -154,7 +156,7 @@ fun QuizScreen(
                     onClick = {
                         when {
                             hasSelected && !isSubmitted -> viewModel.submitAnswer()
-                            currentIdx == viewModel.sampleQuestions.size - 1 -> {
+                            currentIdx == viewModel.questions.size - 1 -> {
                                 val unanswered = viewModel.getUnansweredQuestions()
                                 if (unanswered.isNotEmpty()) {
                                     unansweredText = unanswered.joinToString(", ") { "#$it" }
@@ -174,7 +176,7 @@ fun QuizScreen(
                 ) {
                     val text = when {
                         hasSelected && !isSubmitted -> "Submit"
-                        currentIdx == viewModel.sampleQuestions.size - 1 -> "Finish"
+                        currentIdx == viewModel.questions.size - 1 -> "Finish"
                         else -> "Next"
                     }
                     Text(text, color = Color.White, fontWeight = FontWeight.Bold)

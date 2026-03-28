@@ -20,7 +20,7 @@ import com.thinh.aistudybuddy.data.model.ChatMessage
 fun ChatBubble(
     message: ChatMessage,
     onStartQuiz: () -> Unit,
-    showQuizButton: Boolean = false
+    onCheckPlan: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -34,14 +34,13 @@ fun ChatBubble(
                 painter = painterResource(id = R.drawable.buddy_logo_png),
                 contentDescription = null,
                 modifier = Modifier
-                    .size(60.dp)
+                    .size(48.dp)
                     .padding(top = 4.dp)
             )
 
             Spacer(modifier = Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                // Tin nhắn AI hiển thị trực tiếp không đóng khung
                 Text(
                     text = message.text,
                     color = Color.White,
@@ -49,7 +48,7 @@ fun ChatBubble(
                     lineHeight = 24.sp
                 )
 
-                if (showQuizButton) {
+                if (message.showQuizButton) {
                     Spacer(modifier = Modifier.height(12.dp))
                     Button(
                         onClick = onStartQuiz,
@@ -59,9 +58,19 @@ fun ChatBubble(
                         Text("Start Quiz", color = Color.Black, fontWeight = FontWeight.Bold)
                     }
                 }
+
+                if (message.showStudyPlanButton) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = onCheckPlan,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E5FF)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Check Plan", color = Color.Black, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
         } else {
-            // Tin nhắn của người dùng vẫn giữ đóng khung để phân biệt
             Box(
                 modifier = Modifier
                     .background(

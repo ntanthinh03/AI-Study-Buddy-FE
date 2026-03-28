@@ -1,70 +1,68 @@
 package com.thinh.aistudybuddy.ui.theme
 
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import com.thinh.aistudybuddy.ui.screens.ChatScreen
-import com.thinh.aistudybuddy.ui.screens.QuizScreen
-import com.thinh.aistudybuddy.ui.screens.WelcomeScreen
-import com.thinh.aistudybuddy.ui.theme.screens.LoginScreen
-import com.thinh.aistudybuddy.ui.theme.screens.RegisterScreen
+import com.thinh.aistudybuddy.ui.screens.*
+import com.thinh.aistudybuddy.viewmodel.QuizViewModel
+import com.thinh.aistudybuddy.viewmodel.StudyPlanViewModel
 
 @Composable
 fun AppNavigation(navController: NavHostController) {
+    val studyViewModel: StudyPlanViewModel = viewModel()
+    val quizViewModel: QuizViewModel = viewModel()
+    var selectedLessonId by remember { mutableStateOf<String?>(null) }
+
     NavHost(
         navController = navController,
         startDestination = "welcome"
     ) {
         composable("welcome") {
-            WelcomeScreen(
-                onFinished = {
-                    navController.navigate("chat") {
-                        popUpTo("welcome") { inclusive = true }
-                    }
-                }
-            )
+            WelcomeScreen(onFinished = {
+                navController.navigate("chat") { popUpTo("welcome") { inclusive = true } }
+            })
         }
-
         composable("chat") {
             ChatScreen(
-                onProfileClick = { navController.navigate("login") },
-                onStartQuiz = { navController.navigate("quiz") }
+                onProfileClick = { navController.navigate("account") },
+                onStartQuiz = { navController.navigate("quiz") },
+                onAccountClick = { navController.navigate("account") },
+                onSettingsClick = { navController.navigate("settings") },
+                onStudyPlanClick = { navController.navigate("study_plan") }
             )
         }
-
-        composable("login") {
-            LoginScreen(
-                onLoginSuccess = {
-                    navController.navigate("chat") {
-                        popUpTo("login") { inclusive = true }
-                    }
+        composable("study_plan") {
+            StudyPlanScreen(
+                onBack = { navController.popBackStack() },
+                onLearnClick = { lesson ->
+                    selectedLessonId = lesson.id
+                    navController.navigate("lesson_learn")
                 },
-                onRegisterClick = { navController.navigate("register") },
-                onBackClick = { navController.popBackStack() }
+                studyViewModel = studyViewModel
             )
         }
-
+        composable("lesson_learn") {
+            val lesson = studyViewModel.activePlan.lessons.find { it.id == selectedLessonId }
+            lesson?.let {
+                LessonLearnScreen(
+                    lesson = it,
+                    onBack = { navController.popBackStack() },
+                    onStartQuiz = {
+                        quizViewModel.onQuizComplete = { score ->
+                            studyViewModel.updateLessonScore(it.id, score / 10)
+                        }
+                        navController.navigate("quiz")
+                    },
+                    quizViewModel = quizViewModel
+                )
+            }
+        }
         composable("quiz") {
-            QuizScreen(
-                onCloseClick = { navController.popBackStack() }
-            )
+            QuizScreen(viewModel = quizViewModel, onCloseClick = { navController.popBackStack() })
         }
-
-        composable("register") {
-            RegisterScreen(
-                onRegisterSuccess = {
-                    navController.navigate("login")
-                },
-                onBackToLogin = {
-                    navController.popBackStack()
-                },
-                onBackToChat = {
-                    navController.navigate("chat") {
-                        popUpTo("chat") { inclusive = true }
-                    }
-                }
-            )
-        }
+        composable("settings") { SettingsScreen(onBack = { navController.popBackStack() }) }
+        composable("account") { UserAccountScreen(onBack = { navController.popBackStack() }) }
     }
 }

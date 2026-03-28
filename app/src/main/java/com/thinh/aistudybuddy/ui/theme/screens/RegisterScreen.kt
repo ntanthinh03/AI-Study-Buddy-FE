@@ -1,17 +1,36 @@
 package com.thinh.aistudybuddy.ui.theme.screens
 
-import BuddyLogo
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -20,6 +39,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.thinh.aistudybuddy.ui.components.AuthTextField
+import com.thinh.aistudybuddy.ui.components.BuddyLogo
+import androidx.compose.foundation.layout.statusBarsPadding
 
 @Composable
 fun RegisterScreen(
@@ -38,7 +59,6 @@ fun RegisterScreen(
 
     Scaffold(
         topBar = {
-
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -49,8 +69,8 @@ fun RegisterScreen(
                 IconButton(
                     onClick = onBackToChat,
                     modifier = Modifier
-                        .align(Alignment.CenterStart)
-                        .padding(start = 8.dp)
+                        .align(Alignment.TopStart)
+                        .padding(start = 8.dp, top = 4.dp)
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -61,9 +81,8 @@ fun RegisterScreen(
 
                 BuddyLogo(
                     modifier = Modifier
-                        .size(80.dp)
+                        .size(270.dp)
                         .align(Alignment.BottomCenter)
-                        .padding(bottom = 0.dp)
                         .aspectRatio(1f)
                 )
             }
@@ -128,7 +147,9 @@ fun RegisterScreen(
                         Toast.makeText(context, "Registration Successful!", Toast.LENGTH_SHORT).show()
                         onRegisterSuccess()
                     },
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2))
                 ) {
@@ -153,9 +174,11 @@ fun RegisterScreen(
 }
 
 @Composable
-fun MajorItem(title: String, isSelected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+private fun MajorItem(title: String, isSelected: Boolean, modifier: Modifier, onClick: () -> Unit) {
     Surface(
-        modifier = modifier.height(48.dp).clickable { onClick() },
+        modifier = modifier
+            .height(48.dp)
+            .clickable { onClick() },
         color = if (isSelected) Color(0xFF1976D2) else Color(0xFF2C2C2E),
         shape = RoundedCornerShape(12.dp),
         border = if (isSelected) null else BorderStroke(1.dp, Color(0xFF3A3A3C))

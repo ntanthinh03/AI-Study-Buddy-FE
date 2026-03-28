@@ -7,6 +7,9 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+// Keep module outputs outside app/build to avoid recurring Windows locks in IDE-managed folders.
+layout.buildDirectory.set(rootProject.layout.buildDirectory.dir("app-module"))
+
 
 android {
     namespace = "com.thinh.aistudybuddy"
@@ -104,6 +107,41 @@ fun unlockBuildDirOnWindows() {
     }
 }
 
+fun forceDeleteDirWithCmd(targetDir: File, maxAttempts: Int = 8) {
+    if (!targetDir.exists()) return
+
+    repeat(maxAttempts) { attempt ->
+        targetDir.makeWritableRecursively()
+
+        ProcessBuilder(
+            "cmd", "/c", "attrib", "-R", "/S", "/D", "${targetDir.absolutePath}\\*"
+        ).start().waitFor()
+        ProcessBuilder(
+            "cmd", "/c", "rmdir", "/s", "/q", targetDir.absolutePath
+        ).start().waitFor()
+
+        if (!targetDir.exists()) return
+        Thread.sleep((attempt + 1) * 300L)
+    }
+
+    if (targetDir.exists()) {
+        throw GradleException(
+            "Could not delete ${targetDir.absolutePath}. Close apps/processes locking the build directory and retry."
+        )
+    }
+}
+
+val prepareFreshModuleBuildDir by tasks.registering {
+    doLast {
+        val isWindows = System.getProperty("os.name").contains("windows", ignoreCase = true)
+        if (!isWindows) return@doLast
+
+        // Workaround for Windows file-handle races in merge resources: start each build from a fresh module build dir.
+        forceDeleteDirWithCmd(layout.buildDirectory.asFile.get())
+    }
+}
+
+
 tasks.withType<Delete>().configureEach {
     doFirst {
         unlockBuildDirOnWindows()
@@ -134,6 +172,10 @@ tasks.named<Delete>("clean").configure {
             )
         }
     }
+}
+
+tasks.named("preBuild").configure {
+    dependsOn(prepareFreshModuleBuildDir)
 }
 
 tasks.matching {

@@ -6,6 +6,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import com.thinh.aistudybuddy.ui.screens.ChatScreen
 import com.thinh.aistudybuddy.ui.screens.QuizScreen
+import com.thinh.aistudybuddy.ui.screens.WelcomeScreen
 import com.thinh.aistudybuddy.ui.theme.screens.LoginScreen
 import com.thinh.aistudybuddy.ui.theme.screens.RegisterScreen
 
@@ -13,8 +14,18 @@ import com.thinh.aistudybuddy.ui.theme.screens.RegisterScreen
 fun AppNavigation(navController: NavHostController) {
     NavHost(
         navController = navController,
-        startDestination = "chat"
+        startDestination = "welcome"
     ) {
+        composable("welcome") {
+            WelcomeScreen(
+                onFinished = {
+                    navController.navigate("chat") {
+                        popUpTo("welcome") { inclusive = true }
+                    }
+                }
+            )
+        }
+
         composable("chat") {
             ChatScreen(
                 onProfileClick = { navController.navigate("login") },
@@ -43,15 +54,12 @@ fun AppNavigation(navController: NavHostController) {
         composable("register") {
             RegisterScreen(
                 onRegisterSuccess = {
-                    // Sau khi đăng ký xong thì về Login để người dùng đăng nhập
                     navController.navigate("login")
                 },
                 onBackToLogin = {
-                    // Quay lại màn hình Login
                     navController.popBackStack()
                 },
                 onBackToChat = {
-                    // Quay thẳng về màn hình Chat
                     navController.navigate("chat") {
                         popUpTo("chat") { inclusive = true }
                     }

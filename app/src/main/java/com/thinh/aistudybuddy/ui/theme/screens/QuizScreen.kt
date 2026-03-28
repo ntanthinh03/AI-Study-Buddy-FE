@@ -34,6 +34,11 @@ fun QuizScreen(
                 viewModel.jumpToQuestion(index)
                 isReviewMode = true
             },
+            onRetake = {
+                viewModel.resetQuiz()
+                showResultScreen = false
+                isReviewMode = false
+            },
             onClose = onCloseClick
         )
         return

@@ -22,6 +22,7 @@ import com.thinh.aistudybuddy.viewmodel.QuizViewModel
 fun QuizResultScreen(
     viewModel: QuizViewModel,
     onReviewQuestion: (Int) -> Unit,
+    onRetake: () -> Unit, // Thêm lambda xử lý làm lại
     onClose: () -> Unit
 ) {
     Column(
@@ -56,9 +57,8 @@ fun QuizResultScreen(
                 items(10) { index ->
                     val status = viewModel.getQuestionStatus(index)
                     val boxColor = when (status) {
-                        QuizViewModel.QuestionStatus.CORRECT -> Color(0xFF2E7D32)
-                        // Đổi .Status thành .QuestionStatus ở đây:
-                        QuizViewModel.QuestionStatus.INCORRECT -> Color(0xFFD32F2F)
+                        QuizViewModel.QuestionStatus.CORRECT -> Color(0xFF2E7D32) // Xanh lá cho câu đúng
+                        QuizViewModel.QuestionStatus.INCORRECT -> Color(0xFFD32F2F) // Đỏ cho câu sai
                         QuizViewModel.QuestionStatus.UNANSWERED -> Color(0xFF2C2C2E)
                     }
 
@@ -79,13 +79,30 @@ fun QuizResultScreen(
 
         Spacer(modifier = Modifier.height(64.dp))
 
+        // NÚT LÀM LẠI VỚI NEW QUIZ (Thêm mới)
         Button(
-            onClick = onClose,
-            modifier = Modifier.fillMaxWidth().height(56.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2)),
+            onClick = onRetake,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E5FF)), // Màu Cyan nổi bật
             shape = RoundedCornerShape(16.dp)
         ) {
-            Text("Back to Home", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text("Retake with New Quiz", color = Color.Black, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // NÚT QUAY LẠI TRANG CHỦ
+        Button(
+            onClick = onClose,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2C2C2E)),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Text("Back to Home", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         }
     }
 }

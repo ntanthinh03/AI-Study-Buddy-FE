@@ -3,7 +3,8 @@ package com.thinh.aistudybuddy.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -36,6 +37,13 @@ fun ChatScreen(
     var newTitle by remember { mutableStateOf("") }
 
     val activeConversation = viewModel.conversations.find { it.id == viewModel.activeConversationId }
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(viewModel.activeMessages.size) {
+        if (viewModel.activeMessages.isNotEmpty()) {
+            listState.animateScrollToItem(viewModel.activeMessages.size - 1)
+        }
+    }
 
     if (showRenameDialog) {
         AlertDialog(
@@ -170,11 +178,8 @@ fun ChatScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
-                        BuddyLogo(
-                            modifier = Modifier
-                                .size(100.dp)
-                                .padding(bottom = 16.dp)
-                        )
+                        BuddyLogo(modifier = Modifier.size(220.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
                         NewChatView(
                             suggestions = viewModel.suggestions,
                             banner = viewModel.banner,
@@ -183,17 +188,23 @@ fun ChatScreen(
                             },
                             onBannerCtaClick = { }
                         )
+                        Spacer(modifier = Modifier.height(48.dp))
                     }
                 } else {
                     LazyColumn(
+                        state = listState,
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(horizontal = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                         contentPadding = PaddingValues(bottom = 16.dp)
                     ) {
-                        items(viewModel.activeMessages) { message ->
-                            ChatBubble(message, onStartQuiz)
+                        itemsIndexed(viewModel.activeMessages) { _, message ->
+                            ChatBubble(
+                                message = message,
+                                onStartQuiz = onStartQuiz,
+                                showQuizButton = message.showQuizButton
+                            )
                         }
                     }
                 }
@@ -208,15 +219,8 @@ fun ChatScreen(
                         inputText = ""
                     }
                 },
-                onPdfImported = { uri ->
-                    viewModel.importPdfSummarize(uri.lastPathSegment ?: "Document.pdf")
-                }
+                onAddClick = { }
             )
         }
     }
-}
-
-@Composable
-fun BuddyLogo(modifier: Modifier) {
-    TODO("Not yet implemented")
 }

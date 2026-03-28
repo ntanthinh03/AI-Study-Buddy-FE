@@ -96,20 +96,43 @@ class ChatViewModel : ViewModel() {
     private fun generateAiReply(convId: String, userMessage: String) {
         viewModelScope.launch {
             isTyping = true
-            delay(2000)
+            delay(1500)
             val index = _conversations.indexOfFirst { it.id == convId }
             if (index != -1) {
                 val updatedConv = _conversations[index]
                 val lowerMsg = userMessage.lowercase()
                 var showQuiz = false
                 var showPlan = false
+
                 val aiResponse = when {
-                    lowerMsg.contains("ai_research_2026.pdf") -> "I've analyzed 'AI_Research_2026.pdf'. Key findings include a 40% increase in engagement using AI Study Buddies."
-                    lowerMsg.contains("quiz") -> { showQuiz = true; "I've prepared a quiz for you. Tap below to start!" }
-                    lowerMsg.contains("plan") -> { showPlan = true; "Here is your study roadmap. Tap 'Check Plan' to see details!" }
-                    else -> "That's interesting! Let me help you with that."
+                    lowerMsg.contains("ai_research_2026.pdf") ->
+                        "I've successfully analyzed the PDF. Here is a concise summary regarding AI research trends for 2026..."
+
+                    lowerMsg.contains("quiz") -> {
+                        showQuiz = true
+                        "I've prepared a specialized quiz for you. Tap the button below to start!"
+                    }
+
+                    lowerMsg.contains("plan") -> {
+                        showPlan = true
+                        "Your personalized study roadmap is ready. Tap 'Check Plan' to view the detailed lessons!"
+                    }
+
+                    lowerMsg.contains("hello") || lowerMsg.contains("hi") ->
+                        "Hello! I'm Buddy, your AI study assistant. How can I help you today?"
+
+                    else -> "I'm sorry, Buddy doesn't quite understand that request. Could you please rephrase it or try asking something else?"
                 }
-                updatedConv.chatMessages.add(ChatMessage(id = UUID.randomUUID().toString(), text = aiResponse, isUser = false, showQuizButton = showQuiz, showStudyPlanButton = showPlan))
+
+                updatedConv.chatMessages.add(
+                    ChatMessage(
+                        id = UUID.randomUUID().toString(),
+                        text = aiResponse,
+                        isUser = false,
+                        showQuizButton = showQuiz,
+                        showStudyPlanButton = showPlan
+                    )
+                )
                 _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages)
             }
             isTyping = false

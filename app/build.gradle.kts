@@ -1,8 +1,12 @@
+import java.io.File
+import org.gradle.api.GradleException
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
 }
+
 
 android {
     namespace = "com.thinh.aistudybuddy"
@@ -83,4 +87,59 @@ dependencies {
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.6.1")
+}
+
+fun File.makeWritableRecursively() {
+    if (!exists()) return
+    walkTopDown().forEach { path ->
+        // Some generated resource folders on Windows are read-only; make them writable before cleanup.
+        path.setWritable(true)
+    }
+}
+
+fun unlockBuildDirOnWindows() {
+    val isWindows = System.getProperty("os.name").contains("windows", ignoreCase = true)
+    if (isWindows) {
+        layout.buildDirectory.asFile.get().makeWritableRecursively()
+    }
+}
+
+tasks.withType<Delete>().configureEach {
+    doFirst {
+        unlockBuildDirOnWindows()
+    }
+}
+
+tasks.named<Delete>("clean").configure {
+    // Use explicit cleanup with retries to avoid Windows file-lock races in Gradle's default deleter.
+    setDelete(emptySet<Any>())
+
+    doLast {
+        val buildDirFile = layout.buildDirectory.asFile.get()
+        if (!buildDirFile.exists()) return@doLast
+
+        unlockBuildDirOnWindows()
+        repeat(6) { attempt ->
+            exec {
+                isIgnoreExitValue = true
+                commandLine("cmd", "/c", "rmdir", "/s", "/q", buildDirFile.absolutePath)
+            }
+            if (!buildDirFile.exists()) return@doLast
+            Thread.sleep((attempt + 1) * 250L)
+        }
+
+        if (buildDirFile.exists()) {
+            throw GradleException(
+                "Could not delete ${buildDirFile.absolutePath}. Close apps locking app/build and retry."
+            )
+        }
+    }
+}
+
+tasks.matching {
+    it.name.contains("merge", ignoreCase = true) && it.name.endsWith("Resources")
+}.configureEach {
+    doFirst {
+        unlockBuildDirOnWindows()
+    }
 }

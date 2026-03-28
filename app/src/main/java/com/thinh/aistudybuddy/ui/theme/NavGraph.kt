@@ -43,10 +43,18 @@ fun AppNavigation(navController: NavHostController) {
         composable("register") {
             RegisterScreen(
                 onRegisterSuccess = {
+                    // Sau khi đăng ký xong thì về Login để người dùng đăng nhập
                     navController.navigate("login")
                 },
                 onBackToLogin = {
+                    // Quay lại màn hình Login
                     navController.popBackStack()
+                },
+                onBackToChat = {
+                    // Quay thẳng về màn hình Chat
+                    navController.navigate("chat") {
+                        popUpTo("chat") { inclusive = true }
+                    }
                 }
             )
         }

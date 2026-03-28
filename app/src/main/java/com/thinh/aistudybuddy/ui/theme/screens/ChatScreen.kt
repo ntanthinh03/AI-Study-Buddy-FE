@@ -8,6 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -164,14 +165,25 @@ fun ChatScreen(
 
             Box(modifier = Modifier.weight(1f)) {
                 if (viewModel.currentChatType == ChatScreenType.NEW_CHAT) {
-                    NewChatView(
-                        suggestions = viewModel.suggestions,
-                        banner = viewModel.banner,
-                        onSuggestionClick = { suggestion ->
-                            viewModel.sendMessage("Please give me study tips for ${suggestion.subtitle}")
-                        },
-                        onBannerCtaClick = { }
-                    )
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        BuddyLogo(
+                            modifier = Modifier
+                                .size(100.dp)
+                                .padding(bottom = 16.dp)
+                        )
+                        NewChatView(
+                            suggestions = viewModel.suggestions,
+                            banner = viewModel.banner,
+                            onSuggestionClick = { suggestion ->
+                                viewModel.sendMessage("Please give me study tips for ${suggestion.subtitle}")
+                            },
+                            onBannerCtaClick = { }
+                        )
+                    }
                 } else {
                     LazyColumn(
                         modifier = Modifier
@@ -202,4 +214,9 @@ fun ChatScreen(
             )
         }
     }
+}
+
+@Composable
+fun BuddyLogo(modifier: Modifier) {
+    TODO("Not yet implemented")
 }

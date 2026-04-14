@@ -25,7 +25,7 @@ import androidx.compose.ui.unit.sp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun UserAccountScreen(onBack: () -> Unit) {
+fun UserAccountScreen(onBack: () -> Unit, onLogout: () -> Unit, onChangePassword: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -112,7 +112,20 @@ fun UserAccountScreen(onBack: () -> Unit) {
             Spacer(modifier = Modifier.height(40.dp))
 
             Button(
-                onClick = { },
+                onClick = onChangePassword,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2)),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Text("Change Password", color = Color.White, fontWeight = FontWeight.Bold)
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Button(
+                onClick = onLogout,
                 modifier = Modifier.fillMaxWidth().height(56.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2C2C2E)),
                 shape = RoundedCornerShape(16.dp)

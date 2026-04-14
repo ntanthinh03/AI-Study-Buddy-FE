@@ -6,7 +6,20 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.google.gson.Gson
+import com.google.gson.JsonElement
+import com.google.gson.JsonObject
+import com.thinh.aistudybuddy.data.local.LocalHistoryStore
+import com.thinh.aistudybuddy.data.network.RetrofitClient
 import com.thinh.aistudybuddy.data.model.QuizQuestion
+import com.thinh.aistudybuddy.data.SaveDocumentArtifactRequest
+import com.thinh.aistudybuddy.data.SaveLessonQuizRequest
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import retrofit2.HttpException
+import java.io.IOException
+import java.util.UUID
 
 class QuizViewModel : ViewModel() {
 
@@ -20,6 +33,10 @@ class QuizViewModel : ViewModel() {
 
     var currentQuestionIndex by mutableIntStateOf(0)
     var score by mutableIntStateOf(0)
+    private var currentSessionId by mutableStateOf(UUID.randomUUID().toString())
+    private var currentQuizTitle by mutableStateOf("Quiz Session")
+    private var currentDocumentId by mutableStateOf<String?>(null)
+    private var currentLessonId by mutableStateOf<String?>(null)
 
     val userAnswers = mutableStateListOf<Int>()
     val submittedQuestions = mutableStateListOf<Boolean>()
@@ -110,10 +127,24 @@ class QuizViewModel : ViewModel() {
                 explanation = "The 'implements' keyword is used to implement an interface's methods."
             )
         )
-        loadQuestions(defaultQuestions)
+        val restoredSession = LocalHistoryStore.loadLatestQuizSession()
+        if (restoredSession != null && restoredSession.questions.isNotEmpty()) {
+            restoreQuizSession(restoredSession)
+        } else {
+            loadQuestions(defaultQuestions)
+        }
     }
 
-    fun loadQuestions(newQuestions: List<QuizQuestion>) {
+    fun loadQuestions(
+        newQuestions: List<QuizQuestion>,
+        documentId: String? = currentDocumentId,
+        lessonId: String? = currentLessonId,
+        title: String? = currentQuizTitle
+    ) {
+        currentSessionId = UUID.randomUUID().toString()
+        currentQuizTitle = title?.takeIf { it.isNotBlank() } ?: "Quiz Session"
+        currentDocumentId = documentId
+        currentLessonId = lessonId
         _questions.clear()
         _questions.addAll(newQuestions)
 
@@ -125,11 +156,23 @@ class QuizViewModel : ViewModel() {
 
         currentQuestionIndex = 0
         score = 0
+        isNewRecord = false
+        persistQuizState()
+        persistQuizToBackend()
+    }
+
+    fun setQuizBackendContext(documentId: String? = null, lessonId: String? = null, title: String? = null) {
+        currentDocumentId = documentId?.takeIf { it.isNotBlank() }
+        currentLessonId = lessonId?.takeIf { it.isNotBlank() }
+        if (!title.isNullOrBlank()) {
+            currentQuizTitle = title
+        }
     }
 
     fun selectOption(index: Int) {
         if (!submittedQuestions[currentQuestionIndex]) {
             userAnswers[currentQuestionIndex] = index
+            persistQuizState()
         }
     }
 
@@ -141,6 +184,7 @@ class QuizViewModel : ViewModel() {
                 if (selectedIdx == currentQuestion.correctAnswerIndex) {
                     score += 10
                 }
+                persistQuizState()
             }
         }
     }
@@ -166,17 +210,20 @@ class QuizViewModel : ViewModel() {
     fun nextQuestion() {
         if (currentQuestionIndex < _questions.size - 1) {
             currentQuestionIndex++
+            persistQuizState()
         }
     }
 
     fun previousQuestion() {
         if (currentQuestionIndex > 0) {
             currentQuestionIndex--
+            persistQuizState()
         }
     }
 
     fun jumpToQuestion(index: Int) {
         currentQuestionIndex = index
+        persistQuizState()
     }
 
     fun resetQuiz() {
@@ -188,5 +235,99 @@ class QuizViewModel : ViewModel() {
         for (i in submittedQuestions.indices) {
             submittedQuestions[i] = false
         }
+        persistQuizState()
+    }
+
+    private fun restoreQuizSession(session: com.thinh.aistudybuddy.data.local.CachedQuizSession) {
+        currentSessionId = session.sessionId
+        currentQuizTitle = session.title
+        currentDocumentId = session.documentId
+
+        _questions.clear()
+        _questions.addAll(session.questions)
+
+        userAnswers.clear()
+        userAnswers.addAll(session.userAnswers.ifEmpty { List(_questions.size) { -1 } })
+        if (userAnswers.size < _questions.size) {
+            repeat(_questions.size - userAnswers.size) { userAnswers.add(-1) }
+        }
+
+        submittedQuestions.clear()
+        submittedQuestions.addAll(session.submittedQuestions.ifEmpty { List(_questions.size) { false } })
+        if (submittedQuestions.size < _questions.size) {
+            repeat(_questions.size - submittedQuestions.size) { submittedQuestions.add(false) }
+        }
+
+        currentQuestionIndex = session.currentQuestionIndex.coerceIn(0, (_questions.size - 1).coerceAtLeast(0))
+        score = session.score
+        isNewRecord = session.isNewRecord
+    }
+
+    private fun persistQuizState() {
+        if (_questions.isEmpty()) return
+
+        LocalHistoryStore.saveQuizSession(
+            LocalHistoryStore.runtimeQuizSession(
+                sessionId = currentSessionId,
+                title = currentQuizTitle,
+                documentId = currentDocumentId,
+                questions = _questions.toList(),
+                userAnswers = userAnswers.toList(),
+                submittedQuestions = submittedQuestions.toList(),
+                currentQuestionIndex = currentQuestionIndex,
+                score = score,
+                isNewRecord = isNewRecord
+            )
+        )
+    }
+
+    fun persistQuizToBackend() {
+        if (_questions.isEmpty() || RetrofitClient.authToken.isNullOrBlank()) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val quizPayload = buildQuizPayload()
+            try {
+                when {
+                    !currentLessonId.isNullOrBlank() -> {
+                        RetrofitClient.instance.saveProgressLessonQuiz(
+                            currentLessonId!!,
+                            SaveLessonQuizRequest(quiz = quizPayload)
+                        )
+                    }
+
+                    !currentDocumentId.isNullOrBlank() -> {
+                        RetrofitClient.instance.saveDocumentArtifact(
+                            currentDocumentId!!,
+                            SaveDocumentArtifactRequest(
+                                artifactType = "QUIZ",
+                                artifact = quizPayload,
+                                note = "Quiz saved for the signed-in account"
+                            )
+                        )
+                    }
+                }
+            } catch (e: HttpException) {
+                if (e.code() == 401) {
+                    RetrofitClient.authToken = null
+                }
+            } catch (_: IOException) {
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    private fun buildQuizPayload(): JsonElement {
+        val payload = JsonObject().apply {
+            addProperty("sessionId", currentSessionId)
+            addProperty("title", currentQuizTitle)
+            addProperty("score", score)
+            addProperty("currentQuestionIndex", currentQuestionIndex)
+            add("questions", Gson().toJsonTree(_questions))
+            add("userAnswers", Gson().toJsonTree(userAnswers.toList()))
+            add("submittedQuestions", Gson().toJsonTree(submittedQuestions.toList()))
+            currentDocumentId?.let { addProperty("documentId", it) }
+            currentLessonId?.let { addProperty("lessonId", it) }
+        }
+        return payload
     }
 }

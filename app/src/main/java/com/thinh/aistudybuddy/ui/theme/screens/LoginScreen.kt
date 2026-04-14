@@ -18,6 +18,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -30,6 +32,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -37,19 +40,26 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.thinh.aistudybuddy.data.local.SessionStore
+import com.thinh.aistudybuddy.data.network.RetrofitClient
 import com.thinh.aistudybuddy.ui.components.AuthTextField
 import com.thinh.aistudybuddy.ui.components.BuddyLogo
+import com.thinh.aistudybuddy.viewmodel.LoginViewModel
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginScreen(
-    onLoginSuccess: () -> Unit,
+    onLoginSuccess: (String) -> Unit,
     onRegisterClick: () -> Unit,
+    onForgotPasswordClick: () -> Unit,
     onBackClick: () -> Unit
 ) {
     val context = LocalContext.current
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+    val loginViewModel: LoginViewModel = viewModel()
+    var rememberLogin by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -91,11 +101,11 @@ fun LoginScreen(
                 modifier = Modifier.offset(y = (-36).dp)
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             AuthTextField(
-                value = email,
-                onValueChange = { email = it },
+                value = loginViewModel.email,
+                onValueChange = { loginViewModel.email = it },
                 label = "University Email",
                 placeholder = "your.name@university.edu"
             )
@@ -103,31 +113,76 @@ fun LoginScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             AuthTextField(
-                value = password,
-                onValueChange = { password = it },
+                value = loginViewModel.password,
+                onValueChange = { loginViewModel.password = it },
                 label = "Password",
                 placeholder = "Enter your password",
                 isPassword = true
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Checkbox(
+                    checked = rememberLogin,
+                    onCheckedChange = { rememberLogin = it }
+                )
+                Text(
+                    text = "Remember me",
+                    color = Color.LightGray,
+                    fontSize = 14.sp
+                )
+            }
+
+            loginViewModel.errorMessage?.let {
+                Text(
+                    text = it,
+                    color = Color(0xFFE53935),
+                    fontSize = 13.sp,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             Button(
                 onClick = {
-                    Toast.makeText(context, "Login Successful!", Toast.LENGTH_SHORT).show()
-                    onLoginSuccess()
+                    loginViewModel.onLoginClick { displayName ->
+                        val token = RetrofitClient.authToken
+                        if (!token.isNullOrBlank()) {
+                            SessionStore.saveSession(context, token, rememberLogin, displayName)
+                        } else {
+                            SessionStore.clearSession(context)
+                        }
+                        scope.launch {
+                            Toast.makeText(context, "Login Successful!", Toast.LENGTH_SHORT).show()
+                            onLoginSuccess(displayName)
+                        }
+                    }
                 },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
                 shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2))
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2)),
+                enabled = !loginViewModel.isLoading
             ) {
-                Text(
-                    text = "Log In",
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold
-                )
+                if (loginViewModel.isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text(
+                        text = "Log In",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -136,7 +191,7 @@ fun LoginScreen(
                 text = "Forgot Password?",
                 color = Color(0xFF64B5F6),
                 fontSize = 14.sp,
-                modifier = Modifier.clickable { }
+                modifier = Modifier.clickable { onForgotPasswordClick() }
             )
 
             Spacer(modifier = Modifier.height(16.dp))

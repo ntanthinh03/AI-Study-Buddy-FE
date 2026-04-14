@@ -1,6 +1,6 @@
 package com.thinh.aistudybuddy.ui.screens
 
-import androidx.compose.foundation.background
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Help
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -15,13 +16,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.thinh.aistudybuddy.data.local.NetworkConfigStore
+import com.thinh.aistudybuddy.data.network.RetrofitClient
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(onBack: () -> Unit) {
+    val context = LocalContext.current
+    var baseUrl by remember { mutableStateOf(NetworkConfigStore.readBaseUrl(context).orEmpty()) }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -56,8 +63,62 @@ fun SettingsScreen(onBack: () -> Unit) {
 
             Spacer(modifier = Modifier.height(24.dp))
 
+            SettingsSectionTitle("Backend Connection")
+            Surface(
+                color = Color(0xFF1E1E1E),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    OutlinedTextField(
+                        value = baseUrl,
+                        onValueChange = { baseUrl = it },
+                        singleLine = true,
+                        label = { Text("Base URL", color = Color.Gray) },
+                        placeholder = { Text("http://10.0.2.2:3001/", color = Color.DarkGray) },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedContainerColor = Color(0xFF2C2C2E),
+                            unfocusedContainerColor = Color(0xFF2C2C2E),
+                            focusedBorderColor = Color(0xFF00E5FF),
+                            unfocusedBorderColor = Color(0xFF3A3A3C)
+                        )
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = {
+                            val normalized = NetworkConfigStore.normalizeBaseUrl(baseUrl)
+                            if (normalized.isNullOrBlank()) {
+                                Toast.makeText(context, "Enter a valid base URL or reset to auto.", Toast.LENGTH_SHORT).show()
+                                return@Button
+                            }
+                            NetworkConfigStore.saveBaseUrl(context, normalized)
+                            RetrofitClient.setBaseUrlOverride(normalized)
+                            Toast.makeText(context, "Base URL saved.", Toast.LENGTH_SHORT).show()
+                        }) {
+                            Text("Save")
+                        }
+
+                        OutlinedButton(onClick = {
+                            baseUrl = ""
+                            NetworkConfigStore.clearBaseUrl(context)
+                            RetrofitClient.resetBaseUrlOverride()
+                            Toast.makeText(context, "Base URL set to auto.", Toast.LENGTH_SHORT).show()
+                        }) {
+                            Text("Auto")
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
             SettingsSectionTitle("Support & About")
-            SettingsItem(Icons.Default.Help, "Help Center", "")
+            SettingsItem(Icons.AutoMirrored.Filled.Help, "Help Center", "")
             SettingsItem(Icons.Default.Info, "About Buddy", "Version 1.0.2")
             SettingsItem(Icons.Default.Description, "Terms of Service", "")
 

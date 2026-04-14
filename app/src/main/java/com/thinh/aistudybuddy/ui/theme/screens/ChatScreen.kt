@@ -1,50 +1,131 @@
+@file:Suppress("unused", "UNUSED_VALUE")
+
 package com.thinh.aistudybuddy.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import com.thinh.aistudybuddy.ui.components.*
 import com.thinh.aistudybuddy.viewmodel.ChatScreenType
 import com.thinh.aistudybuddy.viewmodel.ChatViewModel
+import com.thinh.aistudybuddy.viewmodel.QuizViewModel
+import com.thinh.aistudybuddy.viewmodel.StudyPlanViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
+    userDisplayName: String,
+    quizViewModel: QuizViewModel,
+    studyPlanViewModel: StudyPlanViewModel,
     onProfileClick: () -> Unit,
     onStartQuiz: () -> Unit,
     onAccountClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onStudyPlanClick: () -> Unit,
+    onConversationHistoryClick: (String) -> Unit,
+    onSessionExpired: () -> Unit,
     viewModel: ChatViewModel = viewModel()
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var inputText by remember { mutableStateOf("") }
     var showMenu by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
     var newTitle by remember { mutableStateOf("") }
+    var pendingImageUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    var pendingImageName by remember { mutableStateOf<String?>(null) }
     val activeConversation = viewModel.conversations.find { it.id == viewModel.activeConversationId }
     val listState = rememberLazyListState()
+    
+    val filePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            val mimeType = context.contentResolver.getType(uri)
+            val uriPath = uri.toString().lowercase()
+            val hasAllowedExtension = uriPath.endsWith(".pdf") || uriPath.endsWith(".png") || uriPath.endsWith(".jpg") || uriPath.endsWith(".jpeg") || uriPath.endsWith(".webp") || uriPath.endsWith(".gif")
+            val isAllowed = mimeType == "application/pdf" || mimeType?.startsWith("image/") == true || hasAllowedExtension
+            if (isAllowed) {
+                val fileName = runCatching {
+                    context.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                        val index = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                        if (index >= 0 && cursor.moveToFirst()) cursor.getString(index) else null
+                    }
+                }.getOrNull()
+                
+                if (mimeType == "application/pdf" || uriPath.endsWith(".pdf")) {
+                    val pdfFileName = fileName ?: "attachment.pdf"
+                    viewModel.setPendingPdf(uri, pdfFileName)
+                } else if (mimeType?.startsWith("image/") == true || hasAllowedExtension) {
+                    // For images, ensure we have a filename with proper extension
+                    val imageName = fileName ?: when {
+                        uriPath.endsWith(".png") -> "image.png"
+                        uriPath.endsWith(".jpg") -> "image.jpg"
+                        uriPath.endsWith(".jpeg") -> "image.jpeg"
+                        uriPath.endsWith(".webp") -> "image.webp"
+                        uriPath.endsWith(".gif") -> "image.gif"
+                        else -> "image.jpg"
+                    }
+                    // Store pending image for image chat
+                    pendingImageUri = uri
+                    pendingImageName = imageName
+                } else {
+                    viewModel.errorMessage = "Unsupported file type. Please choose a PDF or image."
+                }
+            } else {
+                viewModel.errorMessage = "Unsupported file type. Please choose a PDF or image."
+            }
+        }
+    }
 
     LaunchedEffect(viewModel.activeMessages.size, viewModel.isTyping) {
         if (viewModel.activeMessages.isNotEmpty() || viewModel.isTyping) {
             listState.animateScrollToItem(
                 if (viewModel.isTyping) viewModel.activeMessages.size else viewModel.activeMessages.size - 1
             )
+        }
+    }
+
+    LaunchedEffect(quizViewModel) {
+        viewModel.onQuizGenerated = { questions ->
+            quizViewModel.loadQuestions(questions)
+        }
+    }
+
+    LaunchedEffect(studyPlanViewModel) {
+        viewModel.onPlanGenerated = { rawJson ->
+            studyPlanViewModel.loadStudyPlanFromJson(rawJson)
+        }
+    }
+
+
+    LaunchedEffect(viewModel.sessionExpired) {
+        if (viewModel.sessionExpired) {
+            viewModel.consumeSessionExpired()
+            onSessionExpired()
         }
     }
 
@@ -82,8 +163,10 @@ fun ChatScreen(
         drawerState = drawerState,
         drawerContent = {
             ChatDrawer(
+                userDisplayName = userDisplayName,
                 searchQuery = viewModel.searchQuery,
                 conversations = viewModel.filteredConversations,
+                pendingConversations = viewModel.pendingConversations,
                 activeConversationId = viewModel.activeConversationId,
                 onNewChatClick = { viewModel.startNewChat(); scope.launch { drawerState.close() } },
                 onConversationSelected = { id -> viewModel.selectConversation(id); scope.launch { drawerState.close() } },
@@ -95,12 +178,48 @@ fun ChatScreen(
         }
     ) {
         Column(modifier = Modifier.fillMaxSize().background(Color(0xFF121212))) {
+            // Upload status banner removed - status now shown in AI chat bubble
+            viewModel.errorMessage?.let { message ->
+                Surface(color = Color(0xFF2C2C2E)) {
+                    Text(
+                        text = message,
+                        color = Color(0xFFFF6B6B),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
+            }
+
             TopAppBar(
                 title = {
-                    Text(
-                        text = if (viewModel.currentChatType == ChatScreenType.CONTINUING_CHAT) activeConversation?.title ?: "Chat" else "Buddy",
-                        color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis
-                    )
+                    val title = when {
+                        viewModel.currentChatType == ChatScreenType.CONTINUING_CHAT -> {
+                            val conversation = activeConversation
+                            if (conversation?.autoTitleApplied == true && conversation.title.isNotBlank()) conversation.title else "Chat"
+                        }
+                        else -> "Buddy"
+                    }
+                    if (viewModel.currentChatType == ChatScreenType.CONTINUING_CHAT && viewModel.activeConversationId.isNotBlank()) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = title,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            IconButton(onClick = { onConversationHistoryClick(viewModel.activeConversationId) }) {
+                                Icon(Icons.Default.ChevronRight, null, tint = Color.White, modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = title,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 },
                 navigationIcon = {
                     IconButton(onClick = { scope.launch { drawerState.open() } }) { Icon(Icons.Default.Menu, null, tint = Color.White) }
@@ -113,7 +232,7 @@ fun ChatScreen(
                                 DropdownMenuItem(text = { Text("Pin", color = Color.White) }, leadingIcon = { Icon(Icons.Default.PushPin, null, tint = Color.White, modifier = Modifier.size(18.dp)) }, onClick = { showMenu = false })
                                 DropdownMenuItem(text = { Text("Rename", color = Color.White) }, leadingIcon = { Icon(Icons.Default.DriveFileRenameOutline, null, tint = Color.White, modifier = Modifier.size(18.dp)) }, onClick = { showMenu = false; newTitle = activeConversation?.title ?: ""; showRenameDialog = true })
                                 DropdownMenuItem(text = { Text("Delete", color = Color.Red) }, leadingIcon = { Icon(Icons.Default.Delete, null, tint = Color.Red, modifier = Modifier.size(18.dp)) }, onClick = { viewModel.deleteConversation(viewModel.activeConversationId); showMenu = false })
-                                Divider(color = Color.Gray, thickness = 0.5.dp)
+                                HorizontalDivider(color = Color.Gray.copy(alpha = 0.35f), thickness = 0.5.dp)
                                 DropdownMenuItem(text = { Text("Report a problem", color = Color.White) }, leadingIcon = { Icon(Icons.Default.Report, null, tint = Color.White, modifier = Modifier.size(18.dp)) }, onClick = { showMenu = false })
                             }
                         }
@@ -130,10 +249,12 @@ fun ChatScreen(
                         BuddyLogo(modifier = Modifier.size(220.dp))
                         Spacer(modifier = Modifier.height(8.dp))
                         NewChatView(
+                            userDisplayName = userDisplayName,
                             suggestions = viewModel.suggestions,
                             banner = viewModel.banner,
                             onSuggestionClick = { suggestion ->
                                 when (suggestion.title) {
+                                    "Create a Quiz" -> viewModel.sendMessage("Create a quiz from this topic and prepare it for start.")
                                     "Summarize PDF" -> viewModel.sendMessage("Imported: ai_research_2026.pdf. Summarize this.")
                                     "Study Plan" -> viewModel.sendMessage("Create a study plan for ${suggestion.subtitle}")
                                     else -> viewModel.sendMessage("Give me tips for ${suggestion.subtitle}")
@@ -143,24 +264,124 @@ fun ChatScreen(
                         )
                         Spacer(modifier = Modifier.height(48.dp))
                     }
+                } else if (viewModel.activeMessages.isEmpty() && !viewModel.isTyping) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "No messages yet",
+                            color = Color.Gray,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
                 } else {
                     LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
                         itemsIndexed(viewModel.activeMessages) { _, message ->
-                            ChatBubble(message = message, onStartQuiz = onStartQuiz, onCheckPlan = onStudyPlanClick)
+                            ChatBubble(
+                                message = message,
+                                onStartQuiz = onStartQuiz,
+                                onCheckPlan = {
+                                    studyPlanViewModel.refreshProgressTimeline()
+                                    onStudyPlanClick()
+                                }
+                            )
                         }
-                        if (viewModel.isTyping) {
+                        if (viewModel.isTyping && !viewModel.isUploading) {
                             item { TypingIndicator() }
                         }
                     }
                 }
             }
 
-            ChatInputBar(
-                inputText = inputText,
-                onInputTextChange = { inputText = it },
-                onSendMessageClick = { if (inputText.isNotBlank()) { viewModel.sendMessage(inputText); inputText = "" } },
-                onAddClick = { }
-            )
+            // Image Chat Input (for pending image)
+            if (pendingImageUri != null) {
+                Surface(color = Color(0xFF2C2C2E)) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Ask a question about this image:", color = Color.White, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(pendingImageName ?: "image", color = Color.Gray, fontSize = 12.sp)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0xFF1E1E1E), RoundedCornerShape(12.dp))
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.Bottom,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            TextField(
+                                value = inputText,
+                                onValueChange = { inputText = it },
+                                placeholder = { Text("Ask about the image...", color = Color.Gray) },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 40.dp, max = 100.dp),
+                                colors = TextFieldDefaults.colors(
+                                    focusedContainerColor = Color.Transparent,
+                                    unfocusedContainerColor = Color.Transparent,
+                                    focusedIndicatorColor = Color.Transparent,
+                                    unfocusedIndicatorColor = Color.Transparent,
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White,
+                                    cursorColor = Color(0xFF00E5FF)
+                                )
+                            )
+                            
+                            // Cancel button
+                            IconButton(
+                                onClick = {
+                                    pendingImageUri = null
+                                    pendingImageName = null
+                                    inputText = ""
+                                }
+                            ) {
+                                Icon(Icons.Default.Close, contentDescription = "Cancel", tint = Color.Gray)
+                            }
+                            
+                            // Send button
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(if (inputText.isNotBlank()) Color(0xFF00E5FF) else Color(0xFF303030))
+                                    .clickable(enabled = inputText.isNotBlank()) {
+                                        viewModel.sendImageQuestion(context, pendingImageUri!!, inputText)
+                                        inputText = ""
+                                        pendingImageUri = null
+                                        pendingImageName = null
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.Send,
+                                    contentDescription = "Send",
+                                    tint = if (inputText.isNotBlank()) Color.Black else Color.Gray,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            } else {
+                ChatInputBar(
+                    inputText = inputText,
+                    pendingAttachmentName = viewModel.pendingPdfName,
+                    onInputTextChange = { inputText = it },
+                    onSendMessageClick = {
+                        if (!viewModel.pendingPdfName.isNullOrBlank()) {
+                            viewModel.sendMessageWithPendingPdf(context, inputText)
+                            inputText = ""
+                        } else if (inputText.isNotBlank()) {
+                            viewModel.sendMessage(inputText)
+                            inputText = ""
+                        }
+                    },
+                    onRemoveAttachment = { viewModel.clearPendingPdf() },
+                    onAddClick = { filePickerLauncher.launch("*/*") }
+                )
+            }
         }
     }
 }
+

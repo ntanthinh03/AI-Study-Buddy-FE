@@ -11,9 +11,14 @@ data class ChatResponse(
 )
 
 data class ChatMessage(
-    val id: String, // Thêm dòng này để hết lỗi đỏ
+    val id: String,
     val text: String,
     val isUser: Boolean,
+    val attachmentName: String? = null,
     val showQuizButton: Boolean = false,
-    val showStudyPlanButton: Boolean = false
+    val showStudyPlanButton: Boolean = false,
+    val isProcessing: Boolean = false,
+    val imageBase64: String? = null,
+    val imageMimeType: String? = null,
+    val imageOriginalName: String? = null
 )

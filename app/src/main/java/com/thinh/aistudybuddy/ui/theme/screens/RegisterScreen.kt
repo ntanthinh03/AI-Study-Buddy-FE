@@ -38,9 +38,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.thinh.aistudybuddy.ui.components.AuthTextField
 import com.thinh.aistudybuddy.ui.components.BuddyLogo
+import com.thinh.aistudybuddy.viewmodel.RegisterViewModel
 import androidx.compose.foundation.layout.statusBarsPadding
+import android.util.Patterns
+import androidx.compose.material3.CircularProgressIndicator
+
+private val PASSWORD_REGEX = Regex("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^A-Za-z0-9]).{8,16}$")
 
 @Composable
 fun RegisterScreen(
@@ -49,11 +55,15 @@ fun RegisterScreen(
     onBackToChat: () -> Unit
 ) {
     val context = LocalContext.current
+    val registerViewModel: RegisterViewModel = viewModel()
     var fullName by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
     var selectedMajor by remember { mutableStateOf("Computer Science") }
+    var emailError by remember { mutableStateOf<String?>(null) }
+    var passwordError by remember { mutableStateOf<String?>(null) }
+    var confirmPasswordError by remember { mutableStateOf<String?>(null) }
 
     val majors = listOf("Computer Science", "Business", "Medicine", "Engineering")
 
@@ -109,16 +119,79 @@ fun RegisterScreen(
             }
 
             item {
+                registerViewModel.errorMessage?.let {
+                    Text(
+                        text = it,
+                        color = Color(0xFFE53935),
+                        fontSize = 13.sp,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
+
                 AuthTextField(fullName, { fullName = it }, "Full Name", "Enter your full name")
                 Spacer(modifier = Modifier.height(16.dp))
-                AuthTextField(email, { email = it }, "University Email", "your.name@university.edu")
+                AuthTextField(
+                    email,
+                    {
+                        email = it
+                        if (emailError != null) emailError = null
+                    },
+                    "University Email",
+                    "your.name@university.edu"
+                )
+                emailError?.let {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = it,
+                        color = Color(0xFFE53935),
+                        fontSize = 12.sp,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
             item {
-                AuthTextField(password, { password = it }, "Password", "Create a password", isPassword = true)
+                AuthTextField(
+                    password,
+                    {
+                        password = it
+                        if (passwordError != null) passwordError = null
+                    },
+                    "Password",
+                    "Create a password",
+                    isPassword = true
+                )
+                passwordError?.let {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = it,
+                        color = Color(0xFFE53935),
+                        fontSize = 12.sp,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
                 Spacer(modifier = Modifier.height(16.dp))
-                AuthTextField(confirmPassword, { confirmPassword = it }, "Confirm Password", "Repeat password", isPassword = true)
+                AuthTextField(
+                    confirmPassword,
+                    {
+                        confirmPassword = it
+                        if (confirmPasswordError != null) confirmPasswordError = null
+                    },
+                    "Confirm Password",
+                    "Repeat password",
+                    isPassword = true
+                )
+                confirmPasswordError?.let {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = it,
+                        color = Color(0xFFE53935),
+                        fontSize = 12.sp,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(24.dp))
 
@@ -144,16 +217,53 @@ fun RegisterScreen(
 
                 Button(
                     onClick = {
-                        Toast.makeText(context, "Registration Successful!", Toast.LENGTH_SHORT).show()
-                        onRegisterSuccess()
+                        val trimmedEmail = email.trim()
+                        emailError = if (Patterns.EMAIL_ADDRESS.matcher(trimmedEmail).matches()) {
+                            null
+                        } else {
+                            "Invalid email format."
+                        }
+
+                        passwordError = if (PASSWORD_REGEX.matches(password)) {
+                            null
+                        } else {
+                            "Password must be 8-16 characters and include uppercase, lowercase, a number, and a special character."
+                        }
+
+                        confirmPasswordError = if (confirmPassword == password) {
+                            null
+                        } else {
+                            "Confirm password does not match."
+                        }
+
+                        if (emailError != null || passwordError != null || confirmPasswordError != null) {
+                            return@Button
+                        }
+
+                        registerViewModel.fullName = fullName.trim()
+                        registerViewModel.email = trimmedEmail
+                        registerViewModel.password = password
+                        registerViewModel.onRegisterClick {
+                            Toast.makeText(context, "Registration Successful!", Toast.LENGTH_SHORT).show()
+                            onRegisterSuccess()
+                        }
                     },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(56.dp),
                     shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2))
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2)),
+                    enabled = !registerViewModel.isLoading
                 ) {
-                    Text("Sign Up", color = Color.White, fontWeight = FontWeight.Bold)
+                    if (registerViewModel.isLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text("Sign Up", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(20.dp))

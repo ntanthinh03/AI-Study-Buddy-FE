@@ -1,3 +1,5 @@
+@file:Suppress("unused", "UNUSED_VALUE")
+
 package com.thinh.aistudybuddy.ui.screens
 
 import androidx.compose.foundation.background
@@ -7,7 +9,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -26,6 +27,12 @@ fun QuizScreen(
     var isReviewMode by remember { mutableStateOf(false) }
     var showUnansweredDialog by remember { mutableStateOf(false) }
     var unansweredText by remember { mutableStateOf("") }
+
+    LaunchedEffect(showResultScreen) {
+        if (showResultScreen && !isReviewMode) {
+            viewModel.onQuizComplete?.invoke(viewModel.score)
+        }
+    }
 
     if (showResultScreen && !isReviewMode) {
         QuizResultScreen(

@@ -8,19 +8,17 @@ import androidx.lifecycle.viewModelScope
 import com.thinh.aistudybuddy.data.LoginRequest
 import com.thinh.aistudybuddy.data.network.RetrofitClient
 import kotlinx.coroutines.launch
+import retrofit2.HttpException
 
 class LoginViewModel : ViewModel() {
-
-    // 🎨 Quản lý trạng thái UI
     var email by mutableStateOf("")
     var password by mutableStateOf("")
     var isLoading by mutableStateOf(false)
     var errorMessage by mutableStateOf<String?>(null)
 
-    // 🚀 Hàm xử lý Đăng nhập
-    fun onLoginClick(onSuccess: () -> Unit) {
+    fun onLoginClick(onSuccess: (String) -> Unit) {
         if (email.isEmpty() || password.isEmpty()) {
-            errorMessage = "Vui lòng nhập đầy đủ thông tin Thinh ơi!"
+            errorMessage = "Please enter both email and password."
             return
         }
 
@@ -29,15 +27,30 @@ class LoginViewModel : ViewModel() {
             errorMessage = null
             try {
                 val request = LoginRequest(email, password)
-                // Gọi API thông qua RetrofitClient đã tạo
                 val response = RetrofitClient.instance.login(request)
 
-                // ✅ Lưu Token vào Client để dùng cho các API sau
+                if (response.token.isBlank()) {
+                    RetrofitClient.authToken = null
+                    RetrofitClient.logAuthTokenDiagnostics("Login success response but token is blank")
+                    errorMessage = "Login failed: missing access token in response."
+                    return@launch
+                }
+
                 RetrofitClient.authToken = response.token
 
-                onSuccess() // Chuyển sang màn hình Home
+                onSuccess(response.user.fullName.ifBlank { response.user.email })
             } catch (e: Exception) {
-                errorMessage = "Lỗi rồi: ${e.localizedMessage}"
+                RetrofitClient.authToken = null
+                errorMessage = when (e) {
+                    is HttpException -> {
+                        when (e.code()) {
+                            401 -> "Incorrect account or password."
+                            403 -> "Your account is not allowed to sign in."
+                            else -> "Login failed. Please try again."
+                        }
+                    }
+                    else -> "Login failed. Please check your network and try again."
+                }
             } finally {
                 isLoading = false
             }

@@ -18,10 +18,10 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun AuthTextField(
     value: String,
-    onValueChange: (String) -> Unit, // <- Phải có (String) thì mới hết lỗi 'it'
+    onValueChange: (String) -> Unit,
     label: String,
     placeholder: String,
-    isPassword: Boolean = false     // <- Phải có dòng này mới hết lỗi 'isPassword'
+    isPassword: Boolean = false
 ) {
     Column {
         Text(text = label, color = Color.Gray, fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp))

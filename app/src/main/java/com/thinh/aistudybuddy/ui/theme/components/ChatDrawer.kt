@@ -1,6 +1,7 @@
+@file:Suppress("unused", "UNUSED_VALUE")
+
 package com.thinh.aistudybuddy.ui.components
 
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -21,12 +22,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.thinh.aistudybuddy.data.model.Conversation
+import com.thinh.aistudybuddy.data.model.ConversationKind
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatDrawer(
+    userDisplayName: String,
     searchQuery: String,
     conversations: List<Conversation>,
+    pendingConversations: List<Conversation>,
     activeConversationId: String,
     onNewChatClick: () -> Unit,
     onConversationSelected: (String) -> Unit,
@@ -35,22 +39,21 @@ fun ChatDrawer(
     onAccountClick: () -> Unit,
     onSettingsClick: () -> Unit
 ) {
-    var showDeleteDialog by remember { mutableStateOf(false) }
     var conversationToDelete by remember { mutableStateOf<Conversation?>(null) }
 
-    if (showDeleteDialog && conversationToDelete != null) {
+    if (conversationToDelete != null) {
         AlertDialog(
-            onDismissRequest = { showDeleteDialog = false },
+            onDismissRequest = { conversationToDelete = null },
             title = { Text("Delete Chat", color = Color.White) },
             text = { Text("Are you sure you want to delete this conversation?", color = Color.LightGray) },
             confirmButton = {
                 TextButton(onClick = {
                     onDeleteConversation(conversationToDelete!!.id)
-                    showDeleteDialog = false
+                    conversationToDelete = null
                 }) { Text("Delete", color = Color.Red) }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel", color = Color.Gray) }
+                TextButton(onClick = { conversationToDelete = null }) { Text("Cancel", color = Color.Gray) }
             },
             containerColor = Color(0xFF1E1E1E)
         )
@@ -113,68 +116,158 @@ fun ChatDrawer(
             }
 
             Spacer(modifier = Modifier.height(24.dp))
-            Text("Chats", color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(12.dp))
 
             LazyColumn(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(bottom = 16.dp)
             ) {
-                items(conversations, key = { it.id }) { conversation ->
-                    val isActive = conversation.id == activeConversationId
-                    val dismissState = rememberSwipeToDismissBoxState(
-                        confirmValueChange = { direction ->
-                            if (direction == SwipeToDismissBoxValue.StartToEnd) {
-                                conversationToDelete = conversation
-                                showDeleteDialog = true
-                            }
-                            false
-                        }
-                    )
-
-                    SwipeToDismissBox(
-                        state = dismissState,
-                        enableDismissFromEndToStart = false,
-                        backgroundContent = {
-                            val color by animateColorAsState(
-                                when {
-                                    dismissState.progress > 0f -> Color(0xFFE53935)
-                                    else -> Color.Transparent
-                                }, label = "swipe_color"
+                if (conversations.isEmpty() && pendingConversations.isEmpty()) {
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.ChatBubbleOutline,
+                                contentDescription = null,
+                                tint = Color.Gray,
+                                modifier = Modifier.size(28.dp)
                             )
-
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(color, RoundedCornerShape(24.dp))
-                                    .padding(horizontal = 20.dp),
-                                contentAlignment = Alignment.CenterStart
-                            ) {
-                                if (dismissState.progress > 0.1f) {
-                                    Icon(
-                                        imageVector = Icons.Default.Delete,
-                                        contentDescription = "Delete",
-                                        tint = Color.White
-                                    )
-                                }
-                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "No conversations yet",
+                                color = Color.White,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Start a new chat to see it in this drawer.",
+                                color = Color.Gray,
+                                fontSize = 12.sp
+                            )
                         }
-                    ) {
+                    }
+                } else {
+                    if (conversations.isNotEmpty()) {
+                        item {
+                            Text("Chats", color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(4.dp))
+                        }
+                    }
+
+                    items(conversations, key = { it.id }) { conversation ->
+                        val isActive = conversation.id == activeConversationId
+
                         Surface(
                             color = if (isActive) Color(0xFF3A3A3C) else Color(0xFF1E1E1E),
                             shape = RoundedCornerShape(24.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onConversationSelected(conversation.id) }
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(
-                                text = conversation.title,
-                                color = if (isActive) Color.White else Color.LightGray,
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                                fontSize = 14.sp,
-                                maxLines = 1
-                            )
+                            val typeIcon = when (conversation.kind) {
+                                ConversationKind.QUIZ -> Icons.Default.Quiz
+                                ConversationKind.PLAN -> Icons.Default.School
+                                ConversationKind.CHAT -> if (conversation.documentId != null) Icons.Default.Description else Icons.Default.ChatBubble
+                            }
+                            val typeLabel = when (conversation.kind) {
+                                ConversationKind.QUIZ -> "Quiz"
+                                ConversationKind.PLAN -> "Plan"
+                                ConversationKind.CHAT -> "Chat"
+                            }
+                            val displayTitle = if (conversation.autoTitleApplied && conversation.title.isNotBlank()) {
+                                conversation.title
+                            } else {
+                                when {
+                                    conversation.documentId != null -> "Document Chat"
+                                    else -> "Chat"
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onConversationSelected(conversation.id) }
+                                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = typeIcon,
+                                    contentDescription = null,
+                                    tint = if (isActive) Color.White else Color.Gray,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    text = displayTitle,
+                                    color = if (isActive) Color.White else Color.LightGray,
+                                    modifier = Modifier.weight(1f),
+                                    fontSize = 14.sp,
+                                    maxLines = 1
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(text = typeLabel, color = Color.Gray, fontSize = 11.sp)
+                                IconButton(onClick = {
+                                    conversationToDelete = conversation
+                                }) {
+                                    Icon(Icons.Default.Delete, null, tint = Color(0xFFE53935), modifier = Modifier.size(18.dp))
+                                }
+                            }
+                        }
+                    }
+
+                    if (pendingConversations.isNotEmpty()) {
+                        item {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text("Pending chats", color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(4.dp))
+                        }
+
+                        items(pendingConversations, key = { it.id }) { conversation ->
+                            val isActive = conversation.id == activeConversationId
+                            val typeIcon = when (conversation.kind) {
+                                ConversationKind.QUIZ -> Icons.Default.Quiz
+                                ConversationKind.PLAN -> Icons.Default.School
+                                ConversationKind.CHAT -> if (conversation.documentId != null) Icons.Default.Description else Icons.Default.ChatBubble
+                            }
+
+                            Surface(
+                                color = if (isActive) Color(0xFF3A3A3C) else Color(0xFF1E1E1E),
+                                shape = RoundedCornerShape(24.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { onConversationSelected(conversation.id) }
+                                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = typeIcon,
+                                        contentDescription = null,
+                                        tint = if (isActive) Color.White else Color.Gray,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Text(
+                                        text = "Pending chat",
+                                        color = if (isActive) Color.White else Color.LightGray,
+                                        modifier = Modifier.weight(1f),
+                                        fontSize = 14.sp,
+                                        maxLines = 1
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(text = "Pending", color = Color.Gray, fontSize = 11.sp)
+                                    IconButton(onClick = {
+                                        conversationToDelete = conversation
+                                    }) {
+                                        Icon(Icons.Default.Delete, null, tint = Color(0xFFE53935), modifier = Modifier.size(18.dp))
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -203,7 +296,7 @@ fun ChatDrawer(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(
-                            text = "ThinhNguyen",
+                            text = userDisplayName.ifBlank { "ThinhNguyen" },
                             color = Color.White,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.SemiBold

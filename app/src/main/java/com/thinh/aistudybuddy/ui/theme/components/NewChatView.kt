@@ -20,6 +20,7 @@ import com.thinh.aistudybuddy.data.model.Suggestion
 
 @Composable
 fun NewChatView(
+    userDisplayName: String,
     suggestions: List<Suggestion>,
     banner: Banner?,
     onSuggestionClick: (Suggestion) -> Unit,
@@ -33,7 +34,7 @@ fun NewChatView(
         verticalArrangement = Arrangement.Top
     ) {
         Text(
-            text = "Hello, Thinh",
+            text = "Hi, ${userDisplayName.ifBlank { "Thinh" }}",
             color = Color.White,
             fontSize = 40.sp,
             fontWeight = FontWeight.Light,

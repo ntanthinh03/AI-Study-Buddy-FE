@@ -27,8 +27,7 @@ class RegisterViewModel : ViewModel() {
             isLoading = true
             errorMessage = null
             try {
-                // Assuming you add register to your ApiService
-                val request = RegisterRequest(fullName, email, password)
+                val request = RegisterRequest(email = email, password = password, fullName = fullName)
                 RetrofitClient.instance.register(request)
                 onSuccess()
             } catch (e: Exception) {

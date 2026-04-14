@@ -1,18 +1,29 @@
 package com.thinh.aistudybuddy.ui.components
 
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.graphics.BitmapFactory
+import android.util.Base64
 import com.thinh.aistudybuddy.R
 import com.thinh.aistudybuddy.data.model.ChatMessage
 
@@ -41,12 +52,43 @@ fun ChatBubble(
             Spacer(modifier = Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = message.text,
-                    color = Color.White,
-                    fontSize = 16.sp,
-                    lineHeight = 24.sp
-                )
+                if (message.isProcessing) {
+                    // Animated processing message with dots
+                    Row(
+                        modifier = Modifier
+                            .background(Color(0xFF1E1E1E), RoundedCornerShape(20.dp))
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = message.text,
+                            color = Color(0xFFB3E5FC),
+                            fontSize = 16.sp
+                        )
+                        val transition = rememberInfiniteTransition(label = "processing")
+                        repeat(3) { index ->
+                            val delay = index * 150
+                            val scale by transition.animateFloat(
+                                initialValue = 0.5f,
+                                targetValue = 1f,
+                                animationSpec = infiniteRepeatable(
+                                    animation = tween(450, delayMillis = delay, easing = FastOutSlowInEasing),
+                                    repeatMode = RepeatMode.Reverse
+                                ),
+                                label = "dot"
+                            )
+                            Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(Color(0xFF00E5FF).copy(alpha = scale)))
+                        }
+                    }
+                } else {
+                    Text(
+                        text = message.text,
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        lineHeight = 24.sp
+                    )
+                }
 
                 if (message.showQuizButton) {
                     Spacer(modifier = Modifier.height(12.dp))
@@ -80,12 +122,73 @@ fun ChatBubble(
                     .padding(horizontal = 16.dp, vertical = 10.dp)
                     .widthIn(max = 280.dp)
             ) {
-                Text(
-                    text = message.text,
-                    color = Color.White,
-                    fontSize = 16.sp
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Display image if present
+                    if (!message.imageBase64.isNullOrBlank() && !message.imageMimeType.isNullOrBlank()) {
+                        ImageBubble(imageBase64 = message.imageBase64!!, mimeType = message.imageMimeType!!)
+                    }
+
+                    if (!message.attachmentName.isNullOrBlank()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0xFF3A3A3C), RoundedCornerShape(10.dp))
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Description, contentDescription = null, tint = Color(0xFF64B5F6), modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = message.attachmentName,
+                                color = Color.White,
+                                fontSize = 13.sp,
+                                maxLines = 1
+                            )
+                        }
+                    }
+
+                    if (message.text.isNotBlank()) {
+                        Text(
+                            text = message.text,
+                            color = Color.White,
+                            fontSize = 16.sp
+                        )
+                    }
+                }
             }
+        }
+    }
+}
+
+@Composable
+fun ImageBubble(imageBase64: String, mimeType: String) {
+    val imageBitmap: ImageBitmap? = remember(imageBase64) {
+        runCatching {
+            val imageBytes = Base64.decode(imageBase64, Base64.DEFAULT)
+            val bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+            bitmap?.asImageBitmap()
+        }.getOrNull()
+    }
+
+    if (imageBitmap != null) {
+        Image(
+            bitmap = imageBitmap,
+            contentDescription = "Attached image",
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 250.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color(0xFF3A3A3C))
+        )
+    } else {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(100.dp)
+                .background(Color(0xFF3A3A3C), RoundedCornerShape(12.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("Unable to load image", color = Color.Gray, fontSize = 12.sp)
         }
     }
 }

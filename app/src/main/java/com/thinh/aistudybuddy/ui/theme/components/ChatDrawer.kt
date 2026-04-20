@@ -34,30 +34,11 @@ fun ChatDrawer(
     activeConversationId: String,
     onNewChatClick: () -> Unit,
     onConversationSelected: (String) -> Unit,
-    onDeleteConversation: (String) -> Unit,
+    onDeleteConversationRequested: (Conversation) -> Unit,
     onSearchQueryChange: (String) -> Unit,
     onAccountClick: () -> Unit,
     onSettingsClick: () -> Unit
 ) {
-    var conversationToDelete by remember { mutableStateOf<Conversation?>(null) }
-
-    if (conversationToDelete != null) {
-        AlertDialog(
-            onDismissRequest = { conversationToDelete = null },
-            title = { Text("Delete Chat", color = Color.White) },
-            text = { Text("Are you sure you want to delete this conversation?", color = Color.LightGray) },
-            confirmButton = {
-                TextButton(onClick = {
-                    onDeleteConversation(conversationToDelete!!.id)
-                    conversationToDelete = null
-                }) { Text("Delete", color = Color.Red) }
-            },
-            dismissButton = {
-                TextButton(onClick = { conversationToDelete = null }) { Text("Cancel", color = Color.Gray) }
-            },
-            containerColor = Color(0xFF1E1E1E)
-        )
-    }
 
     ModalDrawerSheet(
         drawerContainerColor = Color(0xFF1E1E1E),
@@ -190,7 +171,7 @@ fun ChatDrawer(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable { onConversationSelected(conversation.id) }
-                                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
@@ -210,7 +191,7 @@ fun ChatDrawer(
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(text = typeLabel, color = Color.Gray, fontSize = 11.sp)
                                 IconButton(onClick = {
-                                    conversationToDelete = conversation
+                                    onDeleteConversationRequested(conversation)
                                 }) {
                                     Icon(Icons.Default.Delete, null, tint = Color(0xFFE53935), modifier = Modifier.size(18.dp))
                                 }
@@ -242,7 +223,7 @@ fun ChatDrawer(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clickable { onConversationSelected(conversation.id) }
-                                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Icon(
@@ -262,7 +243,7 @@ fun ChatDrawer(
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(text = "Pending", color = Color.Gray, fontSize = 11.sp)
                                     IconButton(onClick = {
-                                        conversationToDelete = conversation
+                                        onDeleteConversationRequested(conversation)
                                     }) {
                                         Icon(Icons.Default.Delete, null, tint = Color(0xFFE53935), modifier = Modifier.size(18.dp))
                                     }

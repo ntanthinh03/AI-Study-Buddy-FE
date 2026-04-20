@@ -1,6 +1,5 @@
 package com.thinh.aistudybuddy.ui.theme.screens
 
-import android.util.Patterns
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -46,25 +45,30 @@ import com.thinh.aistudybuddy.ui.components.AuthTextField
 import com.thinh.aistudybuddy.ui.components.BuddyLogo
 import com.thinh.aistudybuddy.viewmodel.ForgotPasswordViewModel
 
-@Composable
+private val RESET_PASSWORD_REGEX = Regex("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^A-Za-z0-9]).{8,16}$")
+
 @OptIn(ExperimentalMaterial3Api::class)
-fun ForgotPasswordScreen(
-    onBackToLogin: () -> Unit,
-    onContinueToOtp: (email: String) -> Unit
+@Composable
+fun ForgotPasswordResetScreen(
+    email: String,
+    onBack: () -> Unit,
+    onBackToLogin: () -> Unit
 ) {
     val context = LocalContext.current
-    val forgotPasswordViewModel: ForgotPasswordViewModel = viewModel()
+    val viewModel: ForgotPasswordViewModel = viewModel()
 
-    var email by remember { mutableStateOf("") }
+    var newPassword by remember { mutableStateOf("") }
+    var confirmPassword by remember { mutableStateOf("") }
 
-    var emailError by remember { mutableStateOf<String?>(null) }
+    var newPasswordError by remember { mutableStateOf<String?>(null) }
+    var confirmPasswordError by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { },
                 navigationIcon = {
-                    IconButton(onClick = onBackToLogin) {
+                    IconButton(onClick = onBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
@@ -101,16 +105,14 @@ fun ForgotPasswordScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Forgot Password",
+                    text = "Reset Password",
                     color = Color.White,
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(modifier = Modifier.height(20.dp))
-            }
 
-            item {
-                forgotPasswordViewModel.errorMessage?.let {
+                viewModel.errorMessage?.let {
                     Text(
                         text = it,
                         color = Color(0xFFE53935),
@@ -121,46 +123,70 @@ fun ForgotPasswordScreen(
                 }
 
                 Text(
-                    text = "Enter your email to verify your identity.",
+                    text = "Set a new password for $email.",
                     color = Color.Gray,
                     fontSize = 14.sp,
                     modifier = Modifier.fillMaxWidth()
                 )
+
                 Spacer(modifier = Modifier.height(16.dp))
 
                 AuthTextField(
-                    value = email,
+                    value = newPassword,
                     onValueChange = {
-                        email = it
-                        if (emailError != null) emailError = null
-                        forgotPasswordViewModel.clearError()
+                        newPassword = it
+                        if (newPasswordError != null) newPasswordError = null
+                        viewModel.clearError()
                     },
-                    label = "Email",
-                    placeholder = "your.name@university.edu"
+                    label = "New Password",
+                    placeholder = "Enter new password",
+                    isPassword = true
                 )
-                emailError?.let {
+                newPasswordError?.let {
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(text = it, color = Color(0xFFE53935), fontSize = 12.sp, modifier = Modifier.fillMaxWidth())
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
+                AuthTextField(
+                    value = confirmPassword,
+                    onValueChange = {
+                        confirmPassword = it
+                        if (confirmPasswordError != null) confirmPasswordError = null
+                        viewModel.clearError()
+                    },
+                    label = "Re-confirm Password",
+                    placeholder = "Re-enter new password",
+                    isPassword = true
+                )
+                confirmPasswordError?.let {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(text = it, color = Color(0xFFE53935), fontSize = 12.sp, modifier = Modifier.fillMaxWidth())
+                }
+
                 Spacer(modifier = Modifier.height(24.dp))
 
                 Button(
                     onClick = {
-                        val trimmedEmail = email.trim()
-
-                        emailError = if (Patterns.EMAIL_ADDRESS.matcher(trimmedEmail).matches()) {
+                        newPasswordError = if (RESET_PASSWORD_REGEX.matches(newPassword)) {
                             null
                         } else {
-                            "Invalid email format."
+                            "Password must be 8-16 characters and include uppercase, lowercase, a number, and a special character."
+                        }
+                        confirmPasswordError = if (confirmPassword == newPassword) {
+                            null
+                        } else {
+                            "Re-confirm password does not match."
                         }
 
-                        if (emailError == null) {
-                            forgotPasswordViewModel.sendOtp(trimmedEmail) { response ->
-                                Toast.makeText(context, response.message, Toast.LENGTH_SHORT).show()
-                                onContinueToOtp(trimmedEmail)
+                        if (newPasswordError == null && confirmPasswordError == null) {
+                            viewModel.resetPassword(
+                                email = email,
+                                newPassword = newPassword
+                            ) { message ->
+                                Toast.makeText(context, message.ifBlank { "Password reset successful. Please log in." }, Toast.LENGTH_SHORT).show()
+                                onBackToLogin()
                             }
                         }
                     },
@@ -169,16 +195,16 @@ fun ForgotPasswordScreen(
                         .height(56.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2)),
-                    enabled = !forgotPasswordViewModel.isLoading
+                    enabled = !viewModel.isLoading
                 ) {
-                    if (forgotPasswordViewModel.isLoading) {
+                    if (viewModel.isLoading) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(20.dp),
                             color = Color.White,
                             strokeWidth = 2.dp
                         )
                     } else {
-                        Text("Send OTP", color = Color.White, fontWeight = FontWeight.Bold)
+                        Text("Reset Password", color = Color.White, fontWeight = FontWeight.Bold)
                     }
                 }
 
@@ -200,6 +226,4 @@ fun ForgotPasswordScreen(
         }
     }
 }
-
-
 

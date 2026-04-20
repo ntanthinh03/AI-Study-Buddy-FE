@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -31,7 +32,7 @@ import com.thinh.aistudybuddy.data.model.ChatMessage
 fun ChatBubble(
     message: ChatMessage,
     onStartQuiz: () -> Unit,
-    onCheckPlan: () -> Unit
+    onCheckPlan: (planJson: String?) -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -103,8 +104,44 @@ fun ChatBubble(
 
                 if (message.showStudyPlanButton) {
                     Spacer(modifier = Modifier.height(12.dp))
+                    if (message.courses.isNotEmpty()) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            message.courses.forEach { course ->
+                                Surface(
+                                    color = Color(0xFF2C2C2E),
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.School,
+                                            contentDescription = null,
+                                            tint = Color(0xFF4CAF50),
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(text = course.title, color = Color.White, fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                                            Text(text = "Course", color = Color.Gray, fontSize = 11.sp)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
                     Button(
-                        onClick = onCheckPlan,
+                        onClick = { onCheckPlan(message.planJson) },
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E5FF)),
                         shape = RoundedCornerShape(12.dp)
                     ) {

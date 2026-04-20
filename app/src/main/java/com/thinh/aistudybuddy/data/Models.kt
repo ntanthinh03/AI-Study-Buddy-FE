@@ -1,6 +1,7 @@
 package com.thinh.aistudybuddy.data
 
 import com.google.gson.JsonElement
+import com.google.gson.JsonArray
 import com.google.gson.annotations.SerializedName
 
 data class User(val id: String, val email: String, val fullName: String)
@@ -12,7 +13,12 @@ data class LoginResponse(
     val user: User
 )
 
-data class RegisterRequest(val email: String, val password: String, val fullName: String)
+data class RegisterRequest(
+    val email: String,
+    val password: String,
+    val fullName: String,
+    val phoneNumber: String
+)
 data class RegisterResponse(
     val message: String? = null,
     val token: String? = null,
@@ -21,6 +27,21 @@ data class RegisterResponse(
 data class ForgotPasswordRequest(
     val email: String,
     val phoneNumber: String,
+    val newPassword: String
+)
+data class ForgotPasswordSendOtpRequest(
+    val email: String
+)
+data class ForgotPasswordSendOtpResponse(
+    val message: String,
+    val expiresInMinutes: Int? = null
+)
+data class ForgotPasswordVerifyOtpRequest(
+    val email: String,
+    val otp: String
+)
+data class ForgotPasswordResetPasswordRequest(
+    val email: String,
     val newPassword: String
 )
 data class ChangePasswordRequest(
@@ -152,7 +173,7 @@ data class ProgressLesson(
 )
 
 data class SaveLessonQuizRequest(
-    val quiz: JsonElement
+    val quiz: JsonArray
 )
 
 data class SaveLessonQuizResponse(

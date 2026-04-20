@@ -2,6 +2,12 @@ package com.thinh.aistudybuddy.data.model
 
 import com.google.gson.annotations.SerializedName
 
+data class ChatMessageCourse(
+    val id: String,
+    val title: String,
+    val lessonCount: Int
+)
+
 data class ChatRequest(
     @SerializedName("message") val message: String
 )
@@ -20,5 +26,7 @@ data class ChatMessage(
     val isProcessing: Boolean = false,
     val imageBase64: String? = null,
     val imageMimeType: String? = null,
-    val imageOriginalName: String? = null
+    val imageOriginalName: String? = null,
+    val planJson: String? = null,
+    val courses: List<ChatMessageCourse> = emptyList()
 )

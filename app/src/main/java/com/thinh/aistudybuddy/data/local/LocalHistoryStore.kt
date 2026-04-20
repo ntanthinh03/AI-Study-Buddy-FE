@@ -13,6 +13,7 @@ import com.thinh.aistudybuddy.data.model.StudyProgressItem
 import java.io.File
 
 private const val HISTORY_FILE_NAME = "study_buddy_history.json"
+private const val HISTORY_SCHEMA_VERSION = 2
 
 private val gson: Gson = GsonBuilder().create()
 
@@ -21,6 +22,7 @@ private object HistoryFileLock
 private var historyFile: File? = null
 
 private data class CachedAppHistory(
+    val historyVersion: Int = HISTORY_SCHEMA_VERSION,
     val chatState: CachedChatState? = null,
     val quizSessions: List<CachedQuizSession> = emptyList(),
     val studyPlanState: CachedStudyPlanState? = null
@@ -64,9 +66,17 @@ data class CachedQuizSession(
     val completedAt: Long = System.currentTimeMillis()
 )
 
+data class CachedLessonEnrichment(
+    val theory: String,
+    val quizQuestions: List<QuizQuestion> = emptyList()
+)
+
 data class CachedStudyPlanState(
     val rawJson: String,
-    val timeline: List<StudyProgressItem> = emptyList()
+    val timeline: List<StudyProgressItem> = emptyList(),
+    val lessonEnrichment: Map<String, CachedLessonEnrichment>? = null,
+    val backendLessonIdByModuleId: Map<String, String>? = null,
+    val pendingEnrichmentModuleIds: List<String>? = null
 )
 
 object LocalHistoryStore {
@@ -100,12 +110,21 @@ object LocalHistoryStore {
 
     fun loadStudyPlanState(): CachedStudyPlanState? = readHistory().studyPlanState
 
-    fun saveStudyPlanState(rawJson: String, timeline: List<StudyProgressItem>) {
+    fun saveStudyPlanState(
+        rawJson: String,
+        timeline: List<StudyProgressItem>,
+        lessonEnrichment: Map<String, CachedLessonEnrichment> = emptyMap(),
+        backendLessonIdByModuleId: Map<String, String> = emptyMap(),
+        pendingEnrichmentModuleIds: List<String> = emptyList()
+    ) {
         writeHistory {
             copy(
                 studyPlanState = CachedStudyPlanState(
                     rawJson = rawJson,
-                    timeline = timeline
+                    timeline = timeline,
+                    lessonEnrichment = lessonEnrichment,
+                    backendLessonIdByModuleId = backendLessonIdByModuleId,
+                    pendingEnrichmentModuleIds = pendingEnrichmentModuleIds
                 )
             )
         }
@@ -176,16 +195,25 @@ object LocalHistoryStore {
         val file = synchronized(HistoryFileLock) { historyFile } ?: return CachedAppHistory()
         if (!file.exists()) return CachedAppHistory()
 
-        return runCatching {
+        val history = runCatching {
             file.readText().takeIf { it.isNotBlank() }?.let { gson.fromJson(it, CachedAppHistory::class.java) }
-        }.getOrNull() ?: CachedAppHistory()
+        }.getOrNull() ?: return CachedAppHistory()
+
+        return if (history.historyVersion != HISTORY_SCHEMA_VERSION) {
+            synchronized(HistoryFileLock) {
+                file.delete()
+            }
+            CachedAppHistory()
+        } else {
+            history
+        }
     }
 
     private fun writeHistory(update: CachedAppHistory.() -> CachedAppHistory) {
         synchronized(HistoryFileLock) {
             val file = historyFile ?: return
             val current = readHistory()
-            val updated = current.update()
+            val updated = current.update().copy(historyVersion = HISTORY_SCHEMA_VERSION)
             file.parentFile?.mkdirs()
             file.writeText(gson.toJson(updated))
         }

@@ -5,7 +5,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.thinh.aistudybuddy.data.ForgotPasswordRequest
+import com.thinh.aistudybuddy.data.ForgotPasswordSendOtpRequest
+import com.thinh.aistudybuddy.data.ForgotPasswordSendOtpResponse
+import com.thinh.aistudybuddy.data.ForgotPasswordResetPasswordRequest
+import com.thinh.aistudybuddy.data.ForgotPasswordVerifyOtpRequest
 import com.thinh.aistudybuddy.data.network.RetrofitClient
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
@@ -20,9 +23,52 @@ class ForgotPasswordViewModel : ViewModel() {
         errorMessage = null
     }
 
+    fun sendOtp(
+        email: String,
+        onSuccess: (ForgotPasswordSendOtpResponse) -> Unit
+    ) {
+        viewModelScope.launch {
+            isLoading = true
+            errorMessage = null
+            try {
+                val response = RetrofitClient.instance.forgotPasswordSendOtp(
+                    ForgotPasswordSendOtpRequest(email = email)
+                )
+                onSuccess(response)
+            } catch (e: Exception) {
+                errorMessage = mapSendOtpError(e)
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+
+    fun verifyOtp(
+        email: String,
+        otp: String,
+        onSuccess: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            isLoading = true
+            errorMessage = null
+            try {
+                val response = RetrofitClient.instance.forgotPasswordVerifyOtp(
+                    ForgotPasswordVerifyOtpRequest(
+                        email = email,
+                        otp = otp
+                    )
+                )
+                onSuccess(response.message)
+            } catch (e: Exception) {
+                errorMessage = mapVerifyOtpError(e)
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+
     fun resetPassword(
         email: String,
-        phoneNumber: String,
         newPassword: String,
         onSuccess: (String) -> Unit
     ) {
@@ -30,10 +76,9 @@ class ForgotPasswordViewModel : ViewModel() {
             isLoading = true
             errorMessage = null
             try {
-                val response = RetrofitClient.instance.forgotPassword(
-                    ForgotPasswordRequest(
+                val response = RetrofitClient.instance.forgotPasswordResetPassword(
+                    ForgotPasswordResetPasswordRequest(
                         email = email,
-                        phoneNumber = phoneNumber,
                         newPassword = newPassword
                     )
                 )
@@ -41,8 +86,7 @@ class ForgotPasswordViewModel : ViewModel() {
             } catch (e: Exception) {
                 errorMessage = when (e) {
                     is HttpException -> when (e.code()) {
-                        400 -> "This account does not have a phone number for verification."
-                        401 -> "Email or phone number is incorrect."
+                        400 -> "Password is too weak. Use 8-16 characters with uppercase, lowercase, a number, and a special character."
                         404 -> "No account found with this email."
                         else -> "Password reset failed. Please try again."
                     }
@@ -52,6 +96,29 @@ class ForgotPasswordViewModel : ViewModel() {
                 isLoading = false
             }
         }
+    }
+
+    private fun mapSendOtpError(error: Exception): String {
+        if (error is HttpException) {
+            return when (error.code()) {
+                400 -> "Email is required or has invalid format."
+                404 -> "No account found with this email."
+                503 -> "Email service is unavailable. Please try again later."
+                else -> "Could not send OTP. Please try again."
+            }
+        }
+        return "Network error. Please check your connection and try again."
+    }
+
+    private fun mapVerifyOtpError(error: Exception): String {
+        if (error is HttpException) {
+            return when (error.code()) {
+                400 -> "OTP is invalid or expired. Please try again."
+                404 -> "No account found with this email."
+                else -> "OTP verification failed. Please try again."
+            }
+        }
+        return "Network error. Please check your connection and try again."
     }
 }
 

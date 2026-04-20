@@ -27,6 +27,7 @@ import com.thinh.aistudybuddy.data.local.LocalHistoryStore
 import com.thinh.aistudybuddy.data.network.RetrofitClient
 import com.thinh.aistudybuddy.data.model.Banner
 import com.thinh.aistudybuddy.data.model.ChatMessage
+import com.thinh.aistudybuddy.data.model.ChatMessageCourse
 import com.thinh.aistudybuddy.data.model.Conversation
 import com.thinh.aistudybuddy.data.model.ConversationKind
 import com.thinh.aistudybuddy.data.model.QuizQuestion
@@ -90,10 +91,19 @@ class ChatViewModel : ViewModel() {
     private val _suggestions = mutableStateListOf<Suggestion>()
     val suggestions: List<Suggestion> get() = _suggestions
 
-    private val _banner = mutableStateOf<Banner?>(null)
-    val banner: Banner? get() = _banner.value
+     private val _banner = mutableStateOf<Banner?>(null)
+     val banner: Banner? get() = _banner.value
 
-    init {
+     var successMessage by mutableStateOf<String?>(null)
+         private set
+     var openedFromFreshLogin by mutableStateOf(false)
+         private set
+     var debugAccountKeyHashForLogs by mutableStateOf<String?>(null)
+         private set
+     
+     private val conversationStudyPlansById = mutableMapOf<String, List<ConversationStudyPlanItem>>()
+
+     init {
         seedSuggestions()
         restoreChatHistory()
     }
@@ -548,11 +558,17 @@ class ChatViewModel : ViewModel() {
 
             try {
                 if (isQuizIntent(text)) {
+                    if (!persistIntentTurnForDocument(documentId, text)) {
+                        return@launch
+                    }
                     handleQuizIntent(convId, text)
                     return@launch
                 }
 
                 if (isPlanIntent(text)) {
+                    if (!persistIntentTurnForDocument(documentId, text)) {
+                        return@launch
+                    }
                     handlePlanIntent(convId, text, documentId)
                     return@launch
                 }
@@ -568,6 +584,46 @@ class ChatViewModel : ViewModel() {
             } finally {
                 isTyping = false
             }
+        }
+    }
+
+    private suspend fun persistIntentTurnForDocument(documentId: String, userMessage: String): Boolean {
+        return try {
+            RetrofitClient.instance.sendQuestion(documentId, DocumentChatRequest(userMessage))
+            true
+        } catch (e: HttpException) {
+            handleHttpError(e)
+            false
+        } catch (e: Exception) {
+            errorMessage = e.localizedMessage ?: "Failed to persist message."
+            false
+        }
+    }
+
+    private suspend fun persistIntentTurnForGeneralChat(convId: String, userMessage: String): String? {
+        return try {
+            val currentConversation = _conversations.firstOrNull { it.id == convId }
+            val requestTitle = currentConversation
+                ?.title
+                ?.takeIf { it.isNotBlank() }
+                ?: userMessage.trim().take(48).takeIf { it.isNotBlank() }
+            val response = RetrofitClient.instance.askAI(
+                AskAiRequest(
+                    message = userMessage,
+                    conversationId = convId,
+                    title = requestTitle
+                )
+            )
+            rebindConversationId(convId, response.conversationId)
+        } catch (e: HttpException) {
+            handleHttpError(e, forceLogoutOn401 = false)
+            null
+        } catch (_: SocketTimeoutException) {
+            errorMessage = "The AI is taking longer than expected. Please try again."
+            null
+        } catch (e: Exception) {
+            errorMessage = e.localizedMessage ?: "Failed to persist message."
+            null
         }
     }
 
@@ -751,13 +807,31 @@ class ChatViewModel : ViewModel() {
             }
 
             if (isQuizIntent(userMessage)) {
-                handleQuizIntent(convId, userMessage)
+                val persistedConvId = if (activeDocumentId.isNullOrBlank()) {
+                    persistIntentTurnForGeneralChat(convId, userMessage)
+                } else {
+                    convId
+                }
+                if (persistedConvId == null) {
+                    isTyping = false
+                    return@launch
+                }
+                handleQuizIntent(persistedConvId, userMessage)
                 isTyping = false
                 return@launch
             }
 
             if (isPlanIntent(userMessage)) {
-                handlePlanIntent(convId, userMessage, activeDocumentId)
+                val persistedConvId = if (activeDocumentId.isNullOrBlank()) {
+                    persistIntentTurnForGeneralChat(convId, userMessage)
+                } else {
+                    convId
+                }
+                if (persistedConvId == null) {
+                    isTyping = false
+                    return@launch
+                }
+                handlePlanIntent(persistedConvId, userMessage, activeDocumentId)
                 isTyping = false
                 return@launch
             }
@@ -876,6 +950,7 @@ class ChatViewModel : ViewModel() {
                 note = "Study plan generated from chat"
             )
             updateConversationKind(convId, ConversationKind.PLAN)
+            val courses = extractCoursesFromPlanJson(planJson, parsed)
             val index = _conversations.indexOfFirst { it.id == convId }
             if (index != -1) {
                 val updatedConv = _conversations[index]
@@ -884,7 +959,9 @@ class ChatViewModel : ViewModel() {
                         id = UUID.randomUUID().toString(),
                         text = "Plan is ready. Tap Check Plan to view course lessons.",
                         isUser = false,
-                        showStudyPlanButton = true
+                        showStudyPlanButton = true,
+                        planJson = planJson,
+                        courses = courses
                     )
                 )
                 _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages)
@@ -938,19 +1015,42 @@ class ChatViewModel : ViewModel() {
 
         val hiddenPrompt = buildString {
             append("Create a study plan in valid JSON only. ")
-            append("Schema: {\"planId\":\"...\",\"title\":\"...\",\"overview\":\"...\",\"estimatedTotalMinutes\":120,\"modules\":[{\"moduleId\":\"m1\",\"order\":1,\"documentId\":\"doc-001\",\"title\":\"...\",\"objective\":\"...\",\"estimatedMinutes\":30,\"difficulty\":\"BEGINNER\",\"status\":\"IN_PROGRESS\",\"quiz\":{\"recommendedQuestionCount\":5,\"passScore\":70}}]}. ")
+            append("Schema: {\"planId\":\"...\",\"title\":\"...\",\"overview\":\"...\",\"estimatedTotalMinutes\":120,\"modules\":[{\"moduleId\":\"m1\",\"order\":1,\"documentId\":\"8f7f4d7a-9f9e-4c97-b1e2-c6f9f5e5b0e1\",\"title\":\"...\",\"objective\":\"...\",\"estimatedMinutes\":30,\"difficulty\":\"BEGINNER\",\"status\":\"IN_PROGRESS\",\"quiz\":{\"recommendedQuestionCount\":5,\"passScore\":70}}]}. ")
+            append("If a real backend document id is unknown, set documentId to an empty string. ")
             append("Rules: Output English only, no markdown, no code fences, status must be LOCKED|IN_PROGRESS|COMPLETED. ")
             append("User request: ")
             append(userMessage)
         }
-        val response = RetrofitClient.instance.aiAsk(AiAskRequest(hiddenPrompt)).answer
-        return response
-            .replace("```json", "")
-            .replace("```", "")
-            .trim()
-    }
+         val response = RetrofitClient.instance.aiAsk(AiAskRequest(hiddenPrompt)).answer
+         return response
+             .replace("```json", "")
+             .replace("```", "")
+             .trim()
+     }
 
-    private fun updateConversationKind(convId: String, kind: ConversationKind) {
+     private fun extractCoursesFromPlanJson(planJson: String, parsed: com.thinh.aistudybuddy.data.model.StudyPlanResponse?): List<ChatMessageCourse> {
+         if (parsed == null) return emptyList()
+         
+         // Group modules by title prefix (first course name) and count lessons
+         val courseGroups = mutableMapOf<String, Int>()
+         
+         parsed.modules.forEach { module ->
+             // Use the module title as course name, count occurrences
+             val courseTitle = module.title
+             courseGroups[courseTitle] = (courseGroups[courseTitle] ?: 0) + 1
+         }
+         
+         // Convert to ChatMessageCourse list
+         return courseGroups.map { (title, count) ->
+             ChatMessageCourse(
+                 id = UUID.randomUUID().toString(),
+                 title = title,
+                 lessonCount = count
+             )
+         }
+     }
+
+     private fun updateConversationKind(convId: String, kind: ConversationKind) {
         val index = _conversations.indexOfFirst { it.id == convId }
         if (index == -1) return
         val updated = _conversations[index]
@@ -1139,6 +1239,15 @@ class ChatViewModel : ViewModel() {
                 }
                 _conversations.clear()
                 _conversations.addAll(conversations)
+
+                if (openedFromFreshLogin) {
+                    activeConversationId = ""
+                    activeDocumentId = null
+                    _currentChatType.value = ChatScreenType.NEW_CHAT
+                    openedFromFreshLogin = false
+                    persistChatState()
+                    return@launch
+                }
 
                 val activeStillExists = _conversations.any { it.id == activeConversationId }
                 if (!activeStillExists) {
@@ -1565,5 +1674,55 @@ class ChatViewModel : ViewModel() {
             }
         }
     }
+
+    fun setDebugAccountIdentity(accountIdentifier: String) {
+        openedFromFreshLogin = true
+        debugAccountKeyHashForLogs = hashAccountIdentity(accountIdentifier)
+    }
+
+    fun markNewChatLandingAfterLogin() {
+        openedFromFreshLogin = true
+        activeConversationId = ""
+        activeDocumentId = null
+        _currentChatType.value = ChatScreenType.NEW_CHAT
+    }
+
+    fun getConversationStudyPlans(conversationId: String): List<ConversationStudyPlanItem> {
+        return conversationStudyPlansById[conversationId] ?: emptyList()
+    }
+
+    fun consumeSuccessMessage() {
+        successMessage = null
+    }
+
+    private fun hashAccountIdentity(accountIdentifier: String): String {
+        return try {
+            val digest = java.security.MessageDigest.getInstance("SHA-256")
+            val hash = digest.digest(accountIdentifier.toByteArray())
+            java.util.Formatter().use { formatter ->
+                hash.forEach { formatter.format("%02x", it) }
+                formatter.toString().take(12)
+            }
+        } catch (e: Exception) {
+            "unknown_account"
+        }
+    }
 }
+
+data class ConversationStudyPlanLessonItem(
+    val lessonId: String,
+    val title: String,
+    val documentId: String,
+    val order: Int
+)
+
+data class ConversationStudyPlanItem(
+    val id: String,
+    val title: String,
+    val lessons: List<ConversationStudyPlanLessonItem>,
+    val lessonCount: Int,
+    val rawJson: String,
+    val createdAt: String?
+)
+
 

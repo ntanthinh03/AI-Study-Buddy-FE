@@ -1,5 +1,6 @@
 package com.thinh.aistudybuddy.viewmodel
 
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -8,6 +9,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.gson.Gson
+import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.thinh.aistudybuddy.data.local.LocalHistoryStore
@@ -22,6 +24,9 @@ import java.io.IOException
 import java.util.UUID
 
 class QuizViewModel : ViewModel() {
+    companion object {
+        private const val TAG = "QuizViewModel"
+    }
 
     enum class QuestionStatus {
         CORRECT, INCORRECT, UNANSWERED
@@ -289,9 +294,16 @@ class QuizViewModel : ViewModel() {
             try {
                 when {
                     !currentLessonId.isNullOrBlank() -> {
+                        val lessonQuizArray = buildLessonQuizArray()
+                        if (lessonQuizArray.size() == 0) {
+                            Log.w(TAG, "Skip lesson quiz save: quiz array is empty for lessonId=$currentLessonId")
+                            return@launch
+                        }
+                        val request = SaveLessonQuizRequest(quiz = lessonQuizArray)
+                        Log.d(TAG, "POST /progress/lessons/$currentLessonId/quiz body=${Gson().toJson(request)}")
                         RetrofitClient.instance.saveProgressLessonQuiz(
                             currentLessonId!!,
-                            SaveLessonQuizRequest(quiz = quizPayload)
+                            request
                         )
                     }
 
@@ -329,5 +341,29 @@ class QuizViewModel : ViewModel() {
             currentLessonId?.let { addProperty("lessonId", it) }
         }
         return payload
+    }
+
+    private fun buildLessonQuizArray(): JsonArray {
+        return JsonArray().apply {
+            _questions.forEach { question ->
+                add(JsonObject().apply {
+                    addProperty("question", question.question)
+                    add("options", JsonObject().apply {
+                        question.options.getOrNull(0)?.let { addProperty("A", it) }
+                        question.options.getOrNull(1)?.let { addProperty("B", it) }
+                        question.options.getOrNull(2)?.let { addProperty("C", it) }
+                        question.options.getOrNull(3)?.let { addProperty("D", it) }
+                    })
+                    addProperty("correctAnswer", when (question.correctAnswerIndex) {
+                        0 -> "A"
+                        1 -> "B"
+                        2 -> "C"
+                        3 -> "D"
+                        else -> "A"
+                    })
+                    addProperty("explanation", question.explanation)
+                })
+            }
+        }
     }
 }

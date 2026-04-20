@@ -47,6 +47,7 @@ import android.util.Patterns
 import androidx.compose.material3.CircularProgressIndicator
 
 private val PASSWORD_REGEX = Regex("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^A-Za-z0-9]).{8,16}$")
+private val PHONE_REGEX = Regex("^[+]?[0-9]{9,15}$")
 
 @Composable
 fun RegisterScreen(
@@ -58,10 +59,12 @@ fun RegisterScreen(
     val registerViewModel: RegisterViewModel = viewModel()
     var fullName by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
+    var phoneNumber by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
     var selectedMajor by remember { mutableStateOf("Computer Science") }
     var emailError by remember { mutableStateOf<String?>(null) }
+    var phoneError by remember { mutableStateOf<String?>(null) }
     var passwordError by remember { mutableStateOf<String?>(null) }
     var confirmPasswordError by remember { mutableStateOf<String?>(null) }
 
@@ -150,6 +153,26 @@ fun RegisterScreen(
                     )
                 }
                 Spacer(modifier = Modifier.height(16.dp))
+
+                AuthTextField(
+                    phoneNumber,
+                    {
+                        phoneNumber = it
+                        if (phoneError != null) phoneError = null
+                    },
+                    "Phone Number",
+                    "e.g. +84901234567"
+                )
+                phoneError?.let {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = it,
+                        color = Color(0xFFE53935),
+                        fontSize = 12.sp,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                Spacer(modifier = Modifier.height(16.dp))
             }
 
             item {
@@ -218,10 +241,17 @@ fun RegisterScreen(
                 Button(
                     onClick = {
                         val trimmedEmail = email.trim()
+                        val normalizedPhone = phoneNumber.trim().replace(" ", "")
                         emailError = if (Patterns.EMAIL_ADDRESS.matcher(trimmedEmail).matches()) {
                             null
                         } else {
                             "Invalid email format."
+                        }
+
+                        phoneError = if (PHONE_REGEX.matches(normalizedPhone)) {
+                            null
+                        } else {
+                            "Invalid phone number."
                         }
 
                         passwordError = if (PASSWORD_REGEX.matches(password)) {
@@ -236,12 +266,13 @@ fun RegisterScreen(
                             "Confirm password does not match."
                         }
 
-                        if (emailError != null || passwordError != null || confirmPasswordError != null) {
+                        if (emailError != null || phoneError != null || passwordError != null || confirmPasswordError != null) {
                             return@Button
                         }
 
                         registerViewModel.fullName = fullName.trim()
                         registerViewModel.email = trimmedEmail
+                        registerViewModel.phoneNumber = normalizedPhone
                         registerViewModel.password = password
                         registerViewModel.onRegisterClick {
                             Toast.makeText(context, "Registration Successful!", Toast.LENGTH_SHORT).show()

@@ -130,7 +130,14 @@ object RetrofitClient {
     private fun resolveBaseUrl(): String {
         baseUrlOverride?.let { return it }
 
-        val openPort = (DEFAULT_PORT..MAX_PORT).firstOrNull { port ->
+        val candidatePorts = buildList {
+            add(DEFAULT_PORT)
+            for (port in (DEFAULT_PORT + 1)..MAX_PORT) {
+                add(port)
+            }
+        }
+
+        val openPort = candidatePorts.firstOrNull { port ->
             runCatching {
                 Log.d(TAG, "Probing backend $HOST:$port")
                 Socket().use { socket ->

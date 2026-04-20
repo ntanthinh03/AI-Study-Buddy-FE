@@ -21,6 +21,18 @@ interface ApiService {
     @POST("auth/forgot-password")
     suspend fun forgotPassword(@Body request: ForgotPasswordRequest): MessageResponse
 
+    @Headers("No-Auth: true")
+    @POST("auth/forgot-password/send-otp")
+    suspend fun forgotPasswordSendOtp(@Body request: ForgotPasswordSendOtpRequest): ForgotPasswordSendOtpResponse
+
+    @Headers("No-Auth: true")
+    @POST("auth/forgot-password/verify-otp")
+    suspend fun forgotPasswordVerifyOtp(@Body request: ForgotPasswordVerifyOtpRequest): MessageResponse
+
+    @Headers("No-Auth: true")
+    @POST("auth/forgot-password/reset-password")
+    suspend fun forgotPasswordResetPassword(@Body request: ForgotPasswordResetPasswordRequest): MessageResponse
+
     @POST("auth/change-password")
     suspend fun changePassword(@Body request: ChangePasswordRequest): MessageResponse
 
@@ -141,4 +153,9 @@ interface ApiService {
     suspend fun getConversationMessages(
         @Path("conversationId") conversationId: String
     ): List<ConversationMessage>
+
+    @DELETE("conversations/{conversationId}")
+    suspend fun deleteConversation(
+        @Path("conversationId") conversationId: String
+    ): MessageResponse
 }

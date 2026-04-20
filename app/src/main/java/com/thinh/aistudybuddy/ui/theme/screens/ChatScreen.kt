@@ -56,11 +56,14 @@ fun ChatScreen(
     var inputText by remember { mutableStateOf("") }
     var showMenu by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var conversationToDelete by remember { mutableStateOf<String?>(null) }
     var newTitle by remember { mutableStateOf("") }
     var pendingImageUri by remember { mutableStateOf<android.net.Uri?>(null) }
     var pendingImageName by remember { mutableStateOf<String?>(null) }
     val activeConversation = viewModel.conversations.find { it.id == viewModel.activeConversationId }
     val listState = rememberLazyListState()
+    val snackbarHostState = remember { SnackbarHostState() }
     
     val filePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
@@ -129,6 +132,12 @@ fun ChatScreen(
         }
     }
 
+    LaunchedEffect(viewModel.successMessage) {
+        val message = viewModel.successMessage ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(message)
+        viewModel.consumeSuccessMessage()
+    }
+
     if (showRenameDialog) {
         AlertDialog(
             onDismissRequest = { showRenameDialog = false },
@@ -159,6 +168,31 @@ fun ChatScreen(
         )
     }
 
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Delete Chat", color = Color.White) },
+            text = { Text("Are you sure you want to delete this conversation?", color = Color.LightGray) },
+            confirmButton = {
+                TextButton(onClick = {
+                    val id = conversationToDelete ?: viewModel.activeConversationId
+                    if (id.isNotBlank()) {
+                        viewModel.deleteConversation(id)
+                    }
+                    conversationToDelete = null
+                    showDeleteDialog = false
+                }) { Text("Delete", color = Color.Red) }
+            },
+            dismissButton = {
+                TextButton(onClick = { 
+                    conversationToDelete = null
+                    showDeleteDialog = false 
+                }) { Text("Cancel", color = Color.Gray) }
+            },
+            containerColor = Color(0xFF1E1E1E)
+        )
+    }
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
@@ -170,7 +204,11 @@ fun ChatScreen(
                 activeConversationId = viewModel.activeConversationId,
                 onNewChatClick = { viewModel.startNewChat(); scope.launch { drawerState.close() } },
                 onConversationSelected = { id -> viewModel.selectConversation(id); scope.launch { drawerState.close() } },
-                onDeleteConversation = { id -> viewModel.deleteConversation(id) },
+                onDeleteConversationRequested = { conversation ->
+                    conversationToDelete = conversation.id
+                    showDeleteDialog = true
+                    scope.launch { drawerState.close() }
+                },
                 onSearchQueryChange = { viewModel.updateSearchQuery(it) },
                 onAccountClick = { scope.launch { drawerState.close() }; onAccountClick() },
                 onSettingsClick = { scope.launch { drawerState.close() }; onSettingsClick() }
@@ -231,7 +269,7 @@ fun ChatScreen(
                             DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }, modifier = Modifier.background(Color(0xFF2C2C2E))) {
                                 DropdownMenuItem(text = { Text("Pin", color = Color.White) }, leadingIcon = { Icon(Icons.Default.PushPin, null, tint = Color.White, modifier = Modifier.size(18.dp)) }, onClick = { showMenu = false })
                                 DropdownMenuItem(text = { Text("Rename", color = Color.White) }, leadingIcon = { Icon(Icons.Default.DriveFileRenameOutline, null, tint = Color.White, modifier = Modifier.size(18.dp)) }, onClick = { showMenu = false; newTitle = activeConversation?.title ?: ""; showRenameDialog = true })
-                                DropdownMenuItem(text = { Text("Delete", color = Color.Red) }, leadingIcon = { Icon(Icons.Default.Delete, null, tint = Color.Red, modifier = Modifier.size(18.dp)) }, onClick = { viewModel.deleteConversation(viewModel.activeConversationId); showMenu = false })
+                                DropdownMenuItem(text = { Text("Delete", color = Color.Red) }, leadingIcon = { Icon(Icons.Default.Delete, null, tint = Color.Red, modifier = Modifier.size(18.dp)) }, onClick = { showDeleteDialog = true; showMenu = false })
                                 HorizontalDivider(color = Color.Gray.copy(alpha = 0.35f), thickness = 0.5.dp)
                                 DropdownMenuItem(text = { Text("Report a problem", color = Color.White) }, leadingIcon = { Icon(Icons.Default.Report, null, tint = Color.White, modifier = Modifier.size(18.dp)) }, onClick = { showMenu = false })
                             }
@@ -281,7 +319,10 @@ fun ChatScreen(
                             ChatBubble(
                                 message = message,
                                 onStartQuiz = onStartQuiz,
-                                onCheckPlan = {
+                                onCheckPlan = { planJson ->
+                                    if (!planJson.isNullOrBlank()) {
+                                        studyPlanViewModel.loadStudyPlanFromJson(planJson)
+                                    }
                                     studyPlanViewModel.refreshProgressTimeline()
                                     onStudyPlanClick()
                                 }
@@ -291,6 +332,15 @@ fun ChatScreen(
                             item { TypingIndicator() }
                         }
                     }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(bottom = 12.dp),
+                    contentAlignment = Alignment.BottomCenter
+                ) {
+                    SnackbarHost(hostState = snackbarHostState)
                 }
             }
 
@@ -381,6 +431,7 @@ fun ChatScreen(
                     onAddClick = { filePickerLauncher.launch("*/*") }
                 )
             }
+
         }
     }
 }

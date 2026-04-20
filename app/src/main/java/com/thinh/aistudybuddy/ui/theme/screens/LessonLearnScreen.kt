@@ -134,7 +134,7 @@ fun LessonLearnScreen(
                     quizViewModel.loadQuestions(
                         newQuestions = lesson.quizQuestions,
                         documentId = lesson.documentId.takeIf { docId -> docId.isNotBlank() },
-                        lessonId = lesson.id,
+                        lessonId = null,
                         title = lesson.title
                     )
                     onStartQuiz()

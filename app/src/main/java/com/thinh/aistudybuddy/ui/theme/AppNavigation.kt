@@ -1,5 +1,7 @@
 package com.thinh.aistudybuddy.ui.theme
 
+import android.net.Uri
+import android.util.Log
 import androidx.compose.runtime.*
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
@@ -13,6 +15,8 @@ import com.thinh.aistudybuddy.data.local.SessionStore
 import com.thinh.aistudybuddy.data.network.RetrofitClient
 import com.thinh.aistudybuddy.ui.screens.*
 import com.thinh.aistudybuddy.ui.theme.screens.ChangePasswordScreen
+import com.thinh.aistudybuddy.ui.theme.screens.ForgotPasswordOtpScreen
+import com.thinh.aistudybuddy.ui.theme.screens.ForgotPasswordResetScreen
 import com.thinh.aistudybuddy.ui.theme.screens.ForgotPasswordScreen
 import com.thinh.aistudybuddy.ui.theme.screens.LoginScreen
 import com.thinh.aistudybuddy.ui.theme.screens.RegisterScreen
@@ -27,11 +31,13 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
     val chatViewModel: ChatViewModel = viewModel()
     var selectedLessonId by remember { mutableStateOf<String?>(null) }
     var displayName by remember { mutableStateOf(initialDisplayName) }
+    var inboxBootstrapped by remember { mutableStateOf(false) }
     val forceLogin = {
         chatViewModel.resetForAccountSwitch()
         RetrofitClient.authToken = null
         SessionStore.clearSession(navController.context)
         LocalHistoryStore.clearAll()
+        inboxBootstrapped = false
         displayName = ""
         navController.navigate("login") {
             popUpTo(navController.graph.findStartDestination().id) { inclusive = true }
@@ -53,9 +59,12 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
             LoginScreen(
                 onLoginSuccess = { userName ->
                     displayName = userName
-                    chatViewModel.loadConversationsFromBackend()
+                    chatViewModel.setDebugAccountIdentity(userName)
+                    Log.d("AppNavigation", "Login success -> markNewChatLandingAfterLogin(acct=${chatViewModel.debugAccountKeyHashForLogs})")
+                    chatViewModel.markNewChatLandingAfterLogin()
+                    inboxBootstrapped = false
                     navController.navigate("chat") {
-                        popUpTo("login") { inclusive = true }
+                        popUpTo(navController.graph.findStartDestination().id) { inclusive = true }
                         launchSingleTop = true
                     }
                 },
@@ -83,12 +92,56 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
                         popUpTo("forgot_password") { inclusive = true }
                         launchSingleTop = true
                     }
+                },
+                onContinueToOtp = { email ->
+                    val encodedEmail = Uri.encode(email)
+                    navController.navigate("forgot_password_otp/$encodedEmail")
+                }
+            )
+        }
+        composable(
+            route = "forgot_password_otp/{email}",
+            arguments = listOf(
+                navArgument("email") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val email = Uri.decode(backStackEntry.arguments?.getString("email").orEmpty())
+            ForgotPasswordOtpScreen(
+                email = email,
+                onBack = { navController.popBackStack() },
+                onOtpVerified = {
+                    navController.navigate("forgot_password_reset/${Uri.encode(email)}")
+                },
+                onBackToLogin = {
+                    navController.navigate("login") {
+                        popUpTo("forgot_password") { inclusive = true }
+                        launchSingleTop = true
+                    }
+                }
+            )
+        }
+        composable(
+            route = "forgot_password_reset/{email}",
+            arguments = listOf(
+                navArgument("email") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val email = Uri.decode(backStackEntry.arguments?.getString("email").orEmpty())
+            ForgotPasswordResetScreen(
+                email = email,
+                onBack = { navController.popBackStack() },
+                onBackToLogin = {
+                    navController.navigate("login") {
+                        popUpTo("forgot_password") { inclusive = true }
+                        launchSingleTop = true
+                    }
                 }
             )
         }
         composable("chat") {
-            LaunchedEffect(RetrofitClient.authToken) {
-                if (!RetrofitClient.authToken.isNullOrBlank()) {
+            LaunchedEffect(RetrofitClient.authToken, inboxBootstrapped) {
+                if (!RetrofitClient.authToken.isNullOrBlank() && !inboxBootstrapped) {
+                    inboxBootstrapped = true
                     chatViewModel.loadConversationsFromBackend()
                 }
             }
@@ -111,7 +164,8 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
                 onBack = { navController.popBackStack() },
                 onLearnClick = { lesson ->
                     selectedLessonId = lesson.id
-                    studyViewModel.markModuleStarted(lesson.documentId.ifBlank { lesson.id })
+                    studyViewModel.ensureLessonEnriched(lesson.id)
+                    studyViewModel.markModuleStarted(lesson.documentId)
                     navController.navigate("lesson_learn")
                 },
                 studyViewModel = studyViewModel
@@ -120,13 +174,16 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
         composable("lesson_learn") {
             val lesson = studyViewModel.activePlan.lessons.find { it.id == selectedLessonId }
             lesson?.let {
+                LaunchedEffect(it.id) {
+                    studyViewModel.ensureLessonEnriched(it.id)
+                }
                 LessonLearnScreen(
                     lesson = it,
                     onBack = { navController.popBackStack() },
                     onStartQuiz = {
                         quizViewModel.setQuizBackendContext(
                             documentId = it.documentId.takeIf { docId -> docId.isNotBlank() },
-                            lessonId = it.id,
+                            lessonId = studyViewModel.resolveBackendLessonId(it.id),
                             title = it.title
                         )
                         quizViewModel.onQuizComplete = { score ->
@@ -154,7 +211,21 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
                     chatViewModel.selectConversation(conversationId)
                     navController.popBackStack()
                 },
-                onRefresh = { conversationId -> chatViewModel.refreshConversationMessages(conversationId) },
+                onOpenLesson = { planRawJson, lessonId ->
+                    studyViewModel.loadStudyPlanFromJson(planRawJson)
+                    selectedLessonId = lessonId
+                    studyViewModel.ensureLessonEnriched(lessonId)
+                    val lesson = studyViewModel.activePlan.lessons.find { it.id == lessonId }
+                    if (lesson != null) {
+                        studyViewModel.markModuleStarted(lesson.documentId)
+                    }
+                    navController.navigate("lesson_learn")
+                },
+                timelineStatusByDocumentId = studyViewModel.timeline.associate { it.documentId to it.status },
+                onRefresh = { conversationId ->
+                    chatViewModel.refreshConversationMessages(conversationId)
+                    studyViewModel.refreshProgressTimeline()
+                },
                 chatViewModel = chatViewModel
             )
         }

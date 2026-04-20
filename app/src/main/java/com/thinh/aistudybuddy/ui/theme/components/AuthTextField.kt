@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -21,7 +23,10 @@ fun AuthTextField(
     onValueChange: (String) -> Unit,
     label: String,
     placeholder: String,
-    isPassword: Boolean = false
+    modifier: Modifier = Modifier,
+    isPassword: Boolean = false,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    keyboardActions: KeyboardActions = KeyboardActions.Default
 ) {
     Column {
         Text(text = label, color = Color.Gray, fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp))
@@ -29,10 +34,12 @@ fun AuthTextField(
             value = value,
             onValueChange = onValueChange,
             placeholder = { Text(text = placeholder, color = Color.DarkGray) },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
             singleLine = true,
             visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
+            keyboardOptions = keyboardOptions,
+            keyboardActions = keyboardActions,
             colors = OutlinedTextFieldDefaults.colors(
                 focusedContainerColor = Color(0xFF1E1E1E),
                 unfocusedContainerColor = Color(0xFF1E1E1E),

@@ -1,5 +1,7 @@
 package com.thinh.aistudybuddy.ui.screens
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -10,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -34,6 +37,10 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -41,8 +48,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.thinh.aistudybuddy.data.model.ModuleStatus
 import com.thinh.aistudybuddy.data.model.ChatMessage
 import com.thinh.aistudybuddy.viewmodel.ChatViewModel
+import com.thinh.aistudybuddy.viewmodel.ConversationStudyPlanItem
+import com.thinh.aistudybuddy.viewmodel.ConversationStudyPlanLessonItem
+
+private enum class HistoryViewMode {
+    ARTIFACTS,
+    COURSES,
+    LESSONS
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -50,19 +66,43 @@ fun ConversationHistoryScreen(
     conversationId: String,
     onBack: () -> Unit,
     onOpenConversation: (String) -> Unit,
+    onOpenLesson: (planRawJson: String, lessonId: String) -> Unit,
+    timelineStatusByDocumentId: Map<String, ModuleStatus>,
     onRefresh: (String) -> Unit,
     chatViewModel: ChatViewModel = viewModel()
 ) {
+    var viewMode by remember { mutableStateOf(HistoryViewMode.ARTIFACTS) }
+    var selectedPlan by remember { mutableStateOf<ConversationStudyPlanItem?>(null) }
+
     LaunchedEffect(conversationId) {
         onRefresh(conversationId)
+        viewMode = HistoryViewMode.ARTIFACTS
+        selectedPlan = null
     }
 
     val conversation = chatViewModel.conversations.firstOrNull { it.id == conversationId }
     val historyItems = conversation?.chatMessages.orEmpty().filter { it.showQuizButton || it.showStudyPlanButton }
+    val conversationPlans = chatViewModel.getConversationStudyPlans(conversationId)
     val screenTitle = if (conversation?.autoTitleApplied == true && conversation.title.isNotBlank()) {
         conversation.title
     } else {
         "Conversation History"
+    }
+    val summaryText = when (viewMode) {
+        HistoryViewMode.ARTIFACTS -> if (historyItems.isEmpty()) {
+            "No quiz or study plan history yet."
+        } else {
+            "${historyItems.size} history item(s)"
+        }
+        HistoryViewMode.COURSES -> if (conversationPlans.isEmpty()) {
+            "No study plan found in this conversation."
+        } else {
+            "${conversationPlans.size} course(s)"
+        }
+        HistoryViewMode.LESSONS -> {
+            val count = selectedPlan?.lessonCount ?: 0
+            if (count == 0) "No lessons in this course." else "$count lesson(s)"
+        }
     }
 
     Scaffold(
@@ -70,7 +110,16 @@ fun ConversationHistoryScreen(
             TopAppBar(
                 title = { Text(screenTitle, color = Color.White, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = {
+                        when (viewMode) {
+                            HistoryViewMode.LESSONS -> {
+                                viewMode = HistoryViewMode.COURSES
+                                selectedPlan = null
+                            }
+                            HistoryViewMode.COURSES -> viewMode = HistoryViewMode.ARTIFACTS
+                            HistoryViewMode.ARTIFACTS -> onBack()
+                        }
+                    }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = Color.White)
                     }
                 },
@@ -113,11 +162,7 @@ fun ConversationHistoryScreen(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = if (historyItems.isEmpty()) {
-                            "No quiz or study plan history yet."
-                        } else {
-                            "${historyItems.size} history item(s)"
-                        },
+                        text = summaryText,
                         color = Color.LightGray,
                         fontSize = 13.sp
                     )
@@ -126,7 +171,7 @@ fun ConversationHistoryScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            if (historyItems.isEmpty()) {
+            if (viewMode == HistoryViewMode.ARTIFACTS && historyItems.isEmpty()) {
                 Surface(
                     color = Color(0xFF1E1E1E),
                     shape = RoundedCornerShape(18.dp),
@@ -149,14 +194,102 @@ fun ConversationHistoryScreen(
                         )
                     }
                 }
-            } else {
+            } else if (viewMode == HistoryViewMode.ARTIFACTS) {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     contentPadding = PaddingValues(bottom = 20.dp)
                 ) {
                     items(historyItems) { message ->
-                        HistoryArtifactCard(message = message)
+                        HistoryArtifactCard(
+                            message = message,
+                            onClick = {
+                                if (message.showStudyPlanButton) {
+                                    viewMode = HistoryViewMode.COURSES
+                                }
+                            }
+                        )
+                    }
+                }
+            } else if (viewMode == HistoryViewMode.COURSES) {
+                if (conversationPlans.isEmpty()) {
+                    Surface(
+                        color = Color(0xFF1E1E1E),
+                        shape = RoundedCornerShape(18.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "No course plans found.",
+                                color = Color.White,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Generate a study plan in this chat, then open history again.",
+                                color = Color.Gray,
+                                fontSize = 13.sp
+                            )
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        contentPadding = PaddingValues(bottom = 20.dp)
+                    ) {
+                        items(conversationPlans) { plan ->
+                            CoursePlanCard(
+                                title = plan.title,
+                                lessonCount = plan.lessonCount,
+                                onClick = {
+                                    selectedPlan = plan
+                                    viewMode = HistoryViewMode.LESSONS
+                                }
+                            )
+                        }
+                    }
+                }
+            } else {
+                val lessons = selectedPlan?.lessons.orEmpty()
+                if (lessons.isEmpty()) {
+                    Surface(
+                        color = Color(0xFF1E1E1E),
+                        shape = RoundedCornerShape(18.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "No lessons found.",
+                                color = Color.White,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        contentPadding = PaddingValues(bottom = 20.dp)
+                    ) {
+                        items(lessons) { lesson ->
+                            val status = timelineStatusByDocumentId[lesson.documentId]
+                            LessonItemCard(
+                                lesson = lesson,
+                                status = status,
+                                onClick = {
+                                    selectedPlan?.let { plan ->
+                                        onOpenLesson(plan.rawJson, lesson.lessonId)
+                                    }
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -165,7 +298,7 @@ fun ConversationHistoryScreen(
 }
 
 @Composable
-private fun HistoryArtifactCard(message: ChatMessage) {
+private fun HistoryArtifactCard(message: ChatMessage, onClick: () -> Unit) {
     val isQuiz = message.showQuizButton
     val (icon, title, accent) = when {
         isQuiz -> Triple(Icons.Default.Quiz, "Quiz", Color(0xFF00E5FF))
@@ -175,7 +308,9 @@ private fun HistoryArtifactCard(message: ChatMessage) {
     Card(
         colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
         shape = RoundedCornerShape(18.dp),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -194,6 +329,96 @@ private fun HistoryArtifactCard(message: ChatMessage) {
             )
             Spacer(modifier = Modifier.height(8.dp))
                 HorizontalDivider(color = accent.copy(alpha = 0.35f), thickness = 1.dp)
+        }
+    }
+}
+
+@Composable
+private fun CoursePlanCard(
+    title: String,
+    lessonCount: Int,
+    onClick: () -> Unit
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
+        shape = RoundedCornerShape(18.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(imageVector = Icons.Default.School, contentDescription = null, tint = Color(0xFF4CAF50), modifier = Modifier.size(20.dp))
+            Spacer(modifier = Modifier.size(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = title, color = Color.White, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(text = "$lessonCount lesson(s)", color = Color.LightGray, fontSize = 13.sp)
+            }
+            Icon(imageVector = Icons.Default.ChevronRight, contentDescription = null, tint = Color(0xFF4CAF50), modifier = Modifier.size(18.dp))
+        }
+    }
+}
+
+@Composable
+private fun LessonItemCard(
+    lesson: ConversationStudyPlanLessonItem,
+    status: ModuleStatus?,
+    onClick: () -> Unit
+) {
+    val badgeText = when (status) {
+        ModuleStatus.COMPLETED -> "Completed"
+        ModuleStatus.IN_PROGRESS -> "In Progress"
+        else -> null
+    }
+    val badgeColor = when (status) {
+        ModuleStatus.COMPLETED -> Color(0xFF4CAF50)
+        ModuleStatus.IN_PROGRESS -> Color(0xFF00E5FF)
+        else -> Color.Transparent
+    }
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
+        shape = RoundedCornerShape(18.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(imageVector = Icons.Default.School, contentDescription = null, tint = Color(0xFF00E5FF), modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.size(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = lesson.title, color = Color.White, fontWeight = FontWeight.Medium)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(text = "Lesson ${lesson.order}", color = Color.LightGray, fontSize = 12.sp)
+            }
+            if (badgeText != null) {
+                Row(
+                    modifier = Modifier
+                        .background(badgeColor.copy(alpha = 0.18f), CircleShape)
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Spacer(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .background(badgeColor, CircleShape)
+                    )
+                    Spacer(modifier = Modifier.size(6.dp))
+                    Text(text = badgeText, color = badgeColor, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                }
+                Spacer(modifier = Modifier.size(8.dp))
+            }
+            Icon(imageVector = Icons.Default.ChevronRight, contentDescription = null, tint = Color(0xFF00E5FF), modifier = Modifier.size(18.dp))
         }
     }
 }

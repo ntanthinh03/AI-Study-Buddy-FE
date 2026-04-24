@@ -162,6 +162,7 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
                         } else {
                             chatViewModel.activeConversationId
                         }
+                        if (conversationId.isNullOrBlank()) return@launch
                         studyViewModel.setLessonConversationId(conversationId)
                         navController.navigate("study_plan")
                     }
@@ -182,6 +183,7 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
                         } else {
                             chatViewModel.activeConversationId
                         }
+                        if (conversationId.isNullOrBlank()) return@launch
                         studyViewModel.setLessonConversationId(conversationId)
                         studyViewModel.ensureLessonEnriched(lesson.id)
                         studyViewModel.markModuleStarted(lesson.documentId)
@@ -224,8 +226,9 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
             route = "conversation_history/{conversationId}",
             arguments = listOf(navArgument("conversationId") { type = NavType.StringType })
         ) { backStackEntry ->
+            val conversationId = backStackEntry.arguments?.getString("conversationId").orEmpty()
             ConversationHistoryScreen(
-                conversationId = backStackEntry.arguments?.getString("conversationId").orEmpty(),
+                conversationId = conversationId,
                 onBack = { navController.popBackStack() },
                 onOpenConversation = { conversationId ->
                     chatViewModel.selectConversation(conversationId)

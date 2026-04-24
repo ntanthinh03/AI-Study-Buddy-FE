@@ -2,6 +2,7 @@ package com.thinh.aistudybuddy.viewmodel
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -37,6 +38,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -52,6 +55,8 @@ enum class ChatScreenType {
 class ChatViewModel : ViewModel() {
 
     companion object {
+        private const val TAG = "ChatViewModel"
+        private const val TURN_LOG_TAG = "ChatTurn"
         private const val DOCUMENT_STATUS_POLL_INTERVAL_MS = 2000L
         private const val DOCUMENT_STATUS_MAX_POLLS = 180
     }
@@ -60,6 +65,7 @@ class ChatViewModel : ViewModel() {
 
     private val _conversations = mutableStateListOf<Conversation>()
     val conversations: List<Conversation> get() = _conversations
+    private val turnMutex = Mutex()
 
     var activeConversationId by mutableStateOf("")
     var activeDocumentId by mutableStateOf<String?>(null)
@@ -118,6 +124,15 @@ class ChatViewModel : ViewModel() {
         ))
     }
 
+    private fun newTurnId(prefix: String = "turn"): String {
+        return "$prefix-${System.currentTimeMillis()}-${UUID.randomUUID().toString().take(8)}"
+    }
+
+    private fun logTurn(turnId: String, phase: String, conversationId: String? = null, detail: String = "") {
+        val suffix = if (detail.isBlank()) "" else " detail=$detail"
+        Log.d(TURN_LOG_TAG, "turnId=$turnId phase=$phase conversationId=${conversationId.orEmpty()}$suffix")
+    }
+
     private fun setupMockData() {
         val quizId = UUID.randomUUID().toString()
         val quizConv = Conversation(quizId, "Java Basics Quiz", isQuiz = true, kind = ConversationKind.QUIZ, autoTitleApplied = true).apply {
@@ -166,31 +181,39 @@ class ChatViewModel : ViewModel() {
 
     fun sendMessage(text: String) {
         if (text.isBlank()) return
-        val documentId = activeDocumentId
-        if (documentId != null) {
-            sendPersistedDocumentMessage(documentId, text)
-            return
-        }
+        val turnId = newTurnId()
+        viewModelScope.launch {
+            turnMutex.withLock {
+                val documentId = activeDocumentId
+                if (documentId != null) {
+                    logTurn(turnId, "user_sent_document", activeConversationId, "documentId=$documentId")
+                    sendPersistedDocumentMessage(documentId, text, turnId)
+                    return@withLock
+                }
 
-        if (_currentChatType.value == ChatScreenType.NEW_CHAT) {
-            val newConvId = UUID.randomUUID().toString()
-            val newConv = Conversation(newConvId, "", autoTitleApplied = false).apply {
-                chatMessages.add(ChatMessage(id = UUID.randomUUID().toString(), text = text, isUser = true))
+                if (_currentChatType.value == ChatScreenType.NEW_CHAT) {
+                    val newConvId = UUID.randomUUID().toString()
+                    val newConv = Conversation(newConvId, "", autoTitleApplied = false).apply {
+                        chatMessages.add(ChatMessage(id = UUID.randomUUID().toString(), text = text, isUser = true))
+                    }
+                    _conversations.add(0, newConv)
+                    activeConversationId = newConvId
+                    _currentChatType.value = ChatScreenType.CONTINUING_CHAT
+                    persistChatState()
+                    logTurn(turnId, "user_sent_general", newConvId)
+                    generateAiReply(newConvId, text, turnId)
+                } else {
+                    val index = _conversations.indexOfFirst { it.id == activeConversationId }
+                    if (index != -1) {
+                        val updatedConv = _conversations[index]
+                        updatedConv.chatMessages.add(ChatMessage(id = UUID.randomUUID().toString(), text = text, isUser = true))
+                        _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages)
+                        persistChatState()
+                        logTurn(turnId, "user_sent_general", activeConversationId)
+                        generateAiReply(activeConversationId, text, turnId)
+                    }
+                }
             }
-            _conversations.add(0, newConv)
-            activeConversationId = newConvId
-            _currentChatType.value = ChatScreenType.CONTINUING_CHAT
-            persistChatState()
-            generateAiReply(newConvId, text)
-        } else {
-             val index = _conversations.indexOfFirst { it.id == activeConversationId }
-             if (index != -1) {
-                 val updatedConv = _conversations[index]
-                 updatedConv.chatMessages.add(ChatMessage(id = UUID.randomUUID().toString(), text = text, isUser = true))
-                 _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages)
-                 persistChatState()
-                 generateAiReply(activeConversationId, text)
-             }
         }
     }
 
@@ -207,6 +230,7 @@ class ChatViewModel : ViewModel() {
     fun sendMessageWithPendingPdf(context: Context, text: String) {
         val pdfUri = pendingPdfUri ?: return
         val pdfName = pendingPdfName ?: "attachment.pdf"
+        val turnId = newTurnId("pdf")
         if (text.isBlank()) {
             errorMessage = "Please add a message with your PDF."
             return
@@ -219,99 +243,106 @@ class ChatViewModel : ViewModel() {
         }
 
         viewModelScope.launch {
-            isUploading = true
-            isTyping = false
-            uploadStatusLabel = "Uploading document"
-            uploadTerminalStatus = null
-            errorMessage = null
-
-            val conversationId = if (_currentChatType.value == ChatScreenType.NEW_CHAT) {
-                val newConvId = UUID.randomUUID().toString()
-                _conversations.add(0, Conversation(newConvId, "", autoTitleApplied = false))
-                activeConversationId = newConvId
-                _currentChatType.value = ChatScreenType.CONTINUING_CHAT
-                newConvId
-            } else {
-                activeConversationId
-            }
-
-            appendUserMessage(
-                convId = conversationId,
-                text = text,
-                attachmentName = pdfName
-            )
-            persistChatState()
-
-            // Show animated processing message while reading/summarizing
-            val processingMessageId = appendProcessingMessage(conversationId, "Reading document...")
-            persistChatState()
-
-            try {
-                val uploaded = uploadDocument(context, pdfUri, pdfName)
-                
-                // Update processing message to "Summarizing..."
-                replaceMessage(conversationId, processingMessageId, "Summarizing...")
-                persistChatState()
-                
-                val finalizedDocument = waitForUploadPipeline(uploaded)
-                activeDocumentId = finalizedDocument.id
-
-                val conversationIndex = _conversations.indexOfFirst { it.id == conversationId }
-                if (conversationIndex != -1) {
-                    val updatedConv = _conversations[conversationIndex].copy(
-                        documentId = finalizedDocument.id,
-                        title = finalizedDocument.fileName.ifBlank { _conversations[conversationIndex].title }
-                    )
-                    _conversations[conversationIndex] = updatedConv
-                }
-
-                // Remove processing message and append actual response
-                val index = _conversations.indexOfFirst { it.id == conversationId }
-                if (index != -1) {
-                    val updatedConv = _conversations[index]
-                    updatedConv.chatMessages.removeIf { it.id == processingMessageId }
-                    _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages)
-                }
-                persistChatState()
-
-                val response = RetrofitClient.instance.sendQuestion(finalizedDocument.id, DocumentChatRequest(text))
-                appendAiMessage(conversationId, response.answer)
-                clearPendingPdf()
-                persistChatState()
-            } catch (e: HttpException) {
-                // Remove processing message on error
-                val index = _conversations.indexOfFirst { it.id == conversationId }
-                if (index != -1) {
-                    val updatedConv = _conversations[index]
-                    updatedConv.chatMessages.removeIf { it.id == processingMessageId }
-                    _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages)
-                }
-                uploadTerminalStatus = "FAILED"
-                handleHttpError(e)
-            } catch (e: DocumentProcessingTimeoutException) {
-                // Remove processing message on timeout
-                val index = _conversations.indexOfFirst { it.id == conversationId }
-                if (index != -1) {
-                    val updatedConv = _conversations[index]
-                    updatedConv.chatMessages.removeIf { it.id == processingMessageId }
-                    _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages)
-                }
-                uploadTerminalStatus = "SKIPPED"
-                errorMessage = e.message
-            } catch (e: Exception) {
-                // Remove processing message on error
-                val index = _conversations.indexOfFirst { it.id == conversationId }
-                if (index != -1) {
-                    val updatedConv = _conversations[index]
-                    updatedConv.chatMessages.removeIf { it.id == processingMessageId }
-                    _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages)
-                }
-                uploadTerminalStatus = "FAILED"
-                errorMessage = e.localizedMessage ?: "Failed to send PDF with message."
-            } finally {
-                uploadStatusLabel = null
+            turnMutex.withLock {
+                isUploading = true
                 isTyping = false
-                isUploading = false
+                uploadStatusLabel = "Uploading document"
+                uploadTerminalStatus = null
+                errorMessage = null
+
+                val conversationId = if (_currentChatType.value == ChatScreenType.NEW_CHAT) {
+                    val newConvId = UUID.randomUUID().toString()
+                    _conversations.add(0, Conversation(newConvId, "", autoTitleApplied = false))
+                    activeConversationId = newConvId
+                    _currentChatType.value = ChatScreenType.CONTINUING_CHAT
+                    newConvId
+                } else {
+                    activeConversationId
+                }
+
+                appendUserMessage(
+                    convId = conversationId,
+                    text = text,
+                    attachmentName = pdfName
+                )
+                persistChatState()
+                logTurn(turnId, "user_sent_pdf", conversationId, "file=$pdfName")
+
+                // Show animated processing message while reading/summarizing
+                val processingMessageId = appendProcessingMessage(conversationId, "Reading document...")
+                persistChatState()
+
+                try {
+                    val uploaded = uploadDocument(context, pdfUri, pdfName)
+
+                    // Update processing message to "Summarizing..."
+                    replaceMessage(conversationId, processingMessageId, "Summarizing...")
+                    persistChatState()
+
+                    val finalizedDocument = waitForUploadPipeline(uploaded)
+                    activeDocumentId = finalizedDocument.id
+
+                    val conversationIndex = _conversations.indexOfFirst { it.id == conversationId }
+                    if (conversationIndex != -1) {
+                        val updatedConv = _conversations[conversationIndex].copy(
+                            documentId = finalizedDocument.id,
+                            title = finalizedDocument.fileName.ifBlank { _conversations[conversationIndex].title }
+                        )
+                        _conversations[conversationIndex] = updatedConv
+                    }
+
+                    // Remove processing message and append actual response
+                    val index = _conversations.indexOfFirst { it.id == conversationId }
+                    if (index != -1) {
+                        val updatedConv = _conversations[index]
+                        updatedConv.chatMessages.removeIf { it.id == processingMessageId }
+                        _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages)
+                    }
+                    persistChatState()
+
+                    val response = RetrofitClient.instance.sendQuestion(finalizedDocument.id, DocumentChatRequest(text))
+                    appendAiMessage(conversationId, response.answer)
+                    clearPendingPdf()
+                    persistChatState()
+                    logTurn(turnId, "ai_reply_appended", conversationId, "source=documents_chat")
+                } catch (e: HttpException) {
+                    // Remove processing message on error
+                    val index = _conversations.indexOfFirst { it.id == conversationId }
+                    if (index != -1) {
+                        val updatedConv = _conversations[index]
+                        updatedConv.chatMessages.removeIf { it.id == processingMessageId }
+                        _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages)
+                    }
+                    uploadTerminalStatus = "FAILED"
+                    handleHttpError(e)
+                    logTurn(turnId, "turn_http_error", conversationId, "code=${e.code()}")
+                } catch (e: DocumentProcessingTimeoutException) {
+                    // Remove processing message on timeout
+                    val index = _conversations.indexOfFirst { it.id == conversationId }
+                    if (index != -1) {
+                        val updatedConv = _conversations[index]
+                        updatedConv.chatMessages.removeIf { it.id == processingMessageId }
+                        _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages)
+                    }
+                    uploadTerminalStatus = "SKIPPED"
+                    errorMessage = e.message
+                    logTurn(turnId, "turn_timeout", conversationId, "stage=document_pipeline")
+                } catch (e: Exception) {
+                    // Remove processing message on error
+                    val index = _conversations.indexOfFirst { it.id == conversationId }
+                    if (index != -1) {
+                        val updatedConv = _conversations[index]
+                        updatedConv.chatMessages.removeIf { it.id == processingMessageId }
+                        _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages)
+                    }
+                    uploadTerminalStatus = "FAILED"
+                    errorMessage = e.localizedMessage ?: "Failed to send PDF with message."
+                    logTurn(turnId, "turn_error", conversationId, e.javaClass.simpleName)
+                } finally {
+                    uploadStatusLabel = null
+                    isTyping = false
+                    isUploading = false
+                }
             }
         }
     }
@@ -545,76 +576,86 @@ class ChatViewModel : ViewModel() {
         }
     }
 
-    private fun sendPersistedDocumentMessage(documentId: String, text: String) {
-        viewModelScope.launch {
-            ensureConversationForDocument(documentId)
-            val index = _conversations.indexOfFirst { conversation -> conversation.documentId == documentId }
-            if (index == -1) return@launch
+    private suspend fun sendPersistedDocumentMessage(documentId: String, text: String, turnId: String) {
+        ensureConversationForDocument(documentId)
+        val index = _conversations.indexOfFirst { conversation -> conversation.documentId == documentId }
+        if (index == -1) return
 
-            val convId = _conversations[index].id
-            appendUserMessage(convId, text)
-            persistChatState()
-            isTyping = true
+        val convId = _conversations[index].id
+        appendUserMessage(convId, text)
+        persistChatState()
+        isTyping = true
 
-            try {
-                if (isQuizIntent(text)) {
-                    if (!persistIntentTurnForDocument(documentId, text)) {
-                        return@launch
-                    }
-                    handleQuizIntent(convId, text)
-                    return@launch
+        try {
+            if (isQuizIntent(text)) {
+                logTurn(turnId, "persist_document_intent_quiz", convId)
+                val persisted = persistIntentTurnForDocument(documentId, text)
+                if (persisted == null) return
+                if (persisted.answer.isNotBlank()) {
+                    appendAiMessage(convId, persisted.answer)
+                    persistChatState()
+                    logTurn(turnId, "ai_reply_appended", convId, "source=documents_chat")
                 }
-
-                if (isPlanIntent(text)) {
-                    if (!persistIntentTurnForDocument(documentId, text)) {
-                        return@launch
-                    }
-                    handlePlanIntent(convId, text, documentId)
-                    return@launch
-                }
-
-                val response = RetrofitClient.instance.sendQuestion(documentId, DocumentChatRequest(text))
-                appendAiMessage(convId, response.answer)
-                persistChatState()
-                maybeAutoRenameConversation(convId, text, response.answer)
-            } catch (e: HttpException) {
-                handleHttpError(e)
-            } catch (e: Exception) {
-                errorMessage = e.localizedMessage ?: "Failed to send message."
-            } finally {
-                isTyping = false
+                handleQuizIntent(convId, text)
+                return
             }
-        }
-    }
 
-    private suspend fun persistIntentTurnForDocument(documentId: String, userMessage: String): Boolean {
-        return try {
-            RetrofitClient.instance.sendQuestion(documentId, DocumentChatRequest(userMessage))
-            true
+            if (isPlanIntent(text)) {
+                logTurn(turnId, "persist_document_intent_plan", convId)
+                val persisted = persistIntentTurnForDocument(documentId, text)
+                if (persisted == null) return
+                if (persisted.answer.isNotBlank()) {
+                    appendAiMessage(convId, persisted.answer)
+                    persistChatState()
+                    logTurn(turnId, "ai_reply_appended", convId, "source=documents_chat")
+                }
+                handlePlanIntent(convId, text, documentId)
+                return
+            }
+
+            logTurn(turnId, "persist_document_request", convId)
+            val response = RetrofitClient.instance.sendQuestion(documentId, DocumentChatRequest(text))
+            appendAiMessage(convId, response.answer)
+            persistChatState()
+            logTurn(turnId, "ai_reply_appended", convId, "source=documents_chat")
+            maybeAutoRenameConversation(convId, text, response.answer)
         } catch (e: HttpException) {
             handleHttpError(e)
-            false
+            logTurn(turnId, "turn_http_error", convId, "code=${e.code()}")
         } catch (e: Exception) {
-            errorMessage = e.localizedMessage ?: "Failed to persist message."
-            false
+            errorMessage = e.localizedMessage ?: "Failed to send message."
+            logTurn(turnId, "turn_error", convId, e.javaClass.simpleName)
+        } finally {
+            isTyping = false
         }
     }
 
-    private suspend fun persistIntentTurnForGeneralChat(convId: String, userMessage: String): String? {
+    private suspend fun persistIntentTurnForDocument(documentId: String, userMessage: String): com.thinh.aistudybuddy.data.ChatResponse? {
+        return try {
+            RetrofitClient.instance.sendQuestion(documentId, DocumentChatRequest(userMessage))
+        } catch (e: HttpException) {
+            handleHttpError(e)
+            null
+        } catch (e: Exception) {
+            errorMessage = e.localizedMessage ?: "Failed to persist message."
+            null
+        }
+    }
+
+    private suspend fun persistIntentTurnForGeneralChat(convId: String, userMessage: String): com.thinh.aistudybuddy.data.ChatAskResponse? {
         return try {
             val currentConversation = _conversations.firstOrNull { it.id == convId }
             val requestTitle = currentConversation
                 ?.title
                 ?.takeIf { it.isNotBlank() }
                 ?: userMessage.trim().take(48).takeIf { it.isNotBlank() }
-            val response = RetrofitClient.instance.askAI(
+            RetrofitClient.instance.askAI(
                 AskAiRequest(
                     message = userMessage,
                     conversationId = convId,
                     title = requestTitle
                 )
             )
-            rebindConversationId(convId, response.conversationId)
         } catch (e: HttpException) {
             handleHttpError(e, forceLogoutOn401 = false)
             null
@@ -797,118 +838,128 @@ class ChatViewModel : ViewModel() {
         else -> "bin"
     }
 
-    private fun generateAiReply(convId: String, userMessage: String) {
-        viewModelScope.launch {
-            isTyping = true
-            val conversationIndex = _conversations.indexOfFirst { it.id == convId }
-            if (conversationIndex == -1) {
-                isTyping = false
-                return@launch
-            }
-
-            if (isQuizIntent(userMessage)) {
-                val persistedConvId = if (activeDocumentId.isNullOrBlank()) {
-                    persistIntentTurnForGeneralChat(convId, userMessage)
-                } else {
-                    convId
-                }
-                if (persistedConvId == null) {
-                    isTyping = false
-                    return@launch
-                }
-                handleQuizIntent(persistedConvId, userMessage)
-                isTyping = false
-                return@launch
-            }
-
-            if (isPlanIntent(userMessage)) {
-                val persistedConvId = if (activeDocumentId.isNullOrBlank()) {
-                    persistIntentTurnForGeneralChat(convId, userMessage)
-                } else {
-                    convId
-                }
-                if (persistedConvId == null) {
-                    isTyping = false
-                    return@launch
-                }
-                handlePlanIntent(persistedConvId, userMessage, activeDocumentId)
-                isTyping = false
-                return@launch
-            }
-
-            try {
-                val currentConversation = _conversations.getOrNull(conversationIndex)
-                val requestTitle = currentConversation
-                    ?.title
-                    ?.takeIf { it.isNotBlank() }
-                    ?: userMessage.trim().take(48).takeIf { it.isNotBlank() }
-                val askResponse = RetrofitClient.instance.askAI(
-                    AskAiRequest(
-                        message = userMessage,
-                        conversationId = convId,
-                        title = requestTitle
-                    )
-                )
-                val resolvedConversationId = rebindConversationId(convId, askResponse.conversationId)
-                val aiResponse = askResponse.answer.ifBlank {
-                    "AI returned an empty response. Please try again."
-                }
-
-                val lowerMsg = userMessage.lowercase()
-                val showQuiz = lowerMsg.contains("quiz")
-                val showPlan = lowerMsg.contains("plan")
-
-                val resolvedIndex = _conversations.indexOfFirst { it.id == resolvedConversationId }
-                if (resolvedIndex == -1) {
-                    isTyping = false
-                    return@launch
-                }
-                val updatedConv = _conversations[resolvedIndex]
-                updatedConv.chatMessages.add(
-                    ChatMessage(
-                        id = askResponse.messageId,
-                        text = aiResponse,
-                        isUser = false,
-                        showQuizButton = showQuiz,
-                        showStudyPlanButton = showPlan
-                    )
-                )
-                _conversations[resolvedIndex] = updatedConv.copy(chatMessages = updatedConv.chatMessages)
-                persistChatState()
-                maybeAutoRenameConversation(
-                    resolvedConversationId,
-                    askResponse.question.ifBlank { userMessage },
-                    aiResponse
-                )
-            } catch (e: HttpException) {
-                handleHttpError(e, forceLogoutOn401 = false)
-            } catch (_: SocketTimeoutException) {
-                errorMessage = "The AI is taking longer than expected. Please try again."
-            } catch (e: Exception) {
-                errorMessage = e.localizedMessage ?: "Failed to get AI response."
-            }
+    private suspend fun generateAiReply(convId: String, userMessage: String, turnId: String) {
+        isTyping = true
+        val conversationIndex = _conversations.indexOfFirst { it.id == convId }
+        if (conversationIndex == -1) {
             isTyping = false
+            return
         }
+
+        if (isQuizIntent(userMessage)) {
+            logTurn(turnId, "persist_general_intent_quiz", convId)
+            val persisted = persistIntentTurnForGeneralChat(convId, userMessage)
+            if (persisted == null) {
+                isTyping = false
+                return
+            }
+            val persistedConvId = rebindConversationId(convId, persisted.conversationId)
+            if (persisted.answer.isNotBlank()) {
+                appendAiMessage(persistedConvId, persisted.answer, persisted.messageId)
+                persistChatState()
+                logTurn(turnId, "ai_reply_appended", persistedConvId, "source=chat_ask")
+            }
+            handleQuizIntent(persistedConvId, userMessage)
+            isTyping = false
+            return
+        }
+
+        if (isPlanIntent(userMessage)) {
+            logTurn(turnId, "persist_general_intent_plan", convId)
+            val persisted = persistIntentTurnForGeneralChat(convId, userMessage)
+            if (persisted == null) {
+                isTyping = false
+                return
+            }
+            val persistedConvId = rebindConversationId(convId, persisted.conversationId)
+            if (persisted.answer.isNotBlank()) {
+                appendAiMessage(persistedConvId, persisted.answer, persisted.messageId)
+                persistChatState()
+                logTurn(turnId, "ai_reply_appended", persistedConvId, "source=chat_ask")
+            }
+            handlePlanIntent(persistedConvId, userMessage, activeDocumentId)
+            isTyping = false
+            return
+        }
+
+        try {
+            val currentConversation = _conversations.getOrNull(conversationIndex)
+            val requestTitle = currentConversation
+                ?.title
+                ?.takeIf { it.isNotBlank() }
+                ?: userMessage.trim().take(48).takeIf { it.isNotBlank() }
+            val askResponse = RetrofitClient.instance.askAI(
+                AskAiRequest(
+                    message = userMessage,
+                    conversationId = convId,
+                    title = requestTitle
+                )
+            )
+            val resolvedConversationId = rebindConversationId(convId, askResponse.conversationId)
+            val aiResponse = askResponse.answer.ifBlank {
+                "AI returned an empty response. Please try again."
+            }
+
+            val lowerMsg = userMessage.lowercase()
+            val showQuiz = lowerMsg.contains("quiz")
+            val showPlan = lowerMsg.contains("plan")
+
+            val resolvedIndex = _conversations.indexOfFirst { it.id == resolvedConversationId }
+            if (resolvedIndex == -1) {
+                isTyping = false
+                return
+            }
+            val updatedConv = _conversations[resolvedIndex]
+            updatedConv.chatMessages.add(
+                ChatMessage(
+                    id = askResponse.messageId,
+                    text = aiResponse,
+                    isUser = false,
+                    showQuizButton = showQuiz,
+                    showStudyPlanButton = showPlan
+                )
+            )
+            _conversations[resolvedIndex] = updatedConv.copy(chatMessages = updatedConv.chatMessages)
+            persistChatState()
+            logTurn(turnId, "ai_reply_appended", resolvedConversationId, "source=chat_ask")
+            maybeAutoRenameConversation(
+                resolvedConversationId,
+                askResponse.question.ifBlank { userMessage },
+                aiResponse
+            )
+        } catch (e: HttpException) {
+            handleHttpError(e, forceLogoutOn401 = false)
+            logTurn(turnId, "turn_http_error", convId, "code=${e.code()}")
+        } catch (_: SocketTimeoutException) {
+            errorMessage = "The AI is taking longer than expected. Please try again."
+            logTurn(turnId, "turn_timeout", convId)
+        } catch (e: Exception) {
+            errorMessage = e.localizedMessage ?: "Failed to get AI response."
+            logTurn(turnId, "turn_error", convId, e.javaClass.simpleName)
+        }
+        isTyping = false
     }
 
     private suspend fun handleQuizIntent(convId: String, userMessage: String) {
         try {
-            val quizQuestions = generateQuizQuestions(userMessage)
+            val generatedQuiz = generateQuizQuestions(convId, userMessage)
+            val resolvedConversationId = generatedQuiz.conversationId ?: convId
+            val quizQuestions = generatedQuiz.questions
             if (quizQuestions.isEmpty()) {
-                appendAiMessage(convId, "Could not generate quiz at the moment. Please try again.")
+                appendAiMessage(resolvedConversationId, "Could not generate quiz at the moment. Please try again.")
                 persistChatState()
                 return
             }
 
             onQuizGenerated?.invoke(quizQuestions)
             persistArtifactToBackend(
-                convId = convId,
+                convId = resolvedConversationId,
                 artifactType = "QUIZ",
                 artifact = Gson().toJsonTree(quizQuestions),
                 note = "Quiz generated from chat"
             )
-            updateConversationKind(convId, ConversationKind.QUIZ)
-            val index = _conversations.indexOfFirst { it.id == convId }
+            updateConversationKind(resolvedConversationId, ConversationKind.QUIZ)
+            val index = _conversations.indexOfFirst { it.id == resolvedConversationId }
             if (index != -1) {
                 val updatedConv = _conversations[index]
                 updatedConv.chatMessages.add(
@@ -921,7 +972,7 @@ class ChatViewModel : ViewModel() {
                 )
                 _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages)
                 persistChatState()
-                maybeAutoRenameConversation(convId, userMessage, "Quiz is ready. Tap Start Quiz to begin.")
+                maybeAutoRenameConversation(resolvedConversationId, userMessage, "Quiz is ready. Tap Start Quiz to begin.")
             }
         } catch (e: HttpException) {
             handleHttpError(e, forceLogoutOn401 = false)
@@ -977,11 +1028,20 @@ class ChatViewModel : ViewModel() {
         }
     }
 
-    private suspend fun generateQuizQuestions(userMessage: String): List<QuizQuestion> {
+    private data class QuizGenerationResult(
+        val questions: List<QuizQuestion>,
+        val conversationId: String? = null
+    )
+
+    private suspend fun generateQuizQuestions(convId: String, userMessage: String): QuizGenerationResult {
         val documentId = activeDocumentId
         if (!documentId.isNullOrBlank() && !RetrofitClient.authToken.isNullOrBlank()) {
             val generated = RetrofitClient.instance.generateQuiz(documentId)
-            return generated.toUiQuizQuestions()
+            val resolvedConversationId = rebindConversationId(convId, generated.conversationId)
+            return QuizGenerationResult(
+                questions = generated.questions.toUiQuizQuestions(),
+                conversationId = resolvedConversationId
+            )
         }
 
         val hiddenPrompt = buildString {
@@ -992,7 +1052,7 @@ class ChatViewModel : ViewModel() {
             append(userMessage)
         }
         val response = RetrofitClient.instance.aiAsk(AiAskRequest(hiddenPrompt)).answer
-        return parseStructuredQuiz(response)
+        return QuizGenerationResult(questions = parseStructuredQuiz(response), conversationId = convId)
     }
 
     private fun isQuizIntent(message: String): Boolean {
@@ -1028,7 +1088,7 @@ class ChatViewModel : ViewModel() {
              .trim()
      }
 
-     private fun extractCoursesFromPlanJson(planJson: String, parsed: com.thinh.aistudybuddy.data.model.StudyPlanResponse?): List<ChatMessageCourse> {
+    private fun extractCoursesFromPlanJson(_planJson: String, parsed: com.thinh.aistudybuddy.data.model.StudyPlanResponse?): List<ChatMessageCourse> {
          if (parsed == null) return emptyList()
          
          // Group modules by title prefix (first course name) and count lessons
@@ -1299,8 +1359,34 @@ class ChatViewModel : ViewModel() {
         }
     }
     fun deleteConversation(id: String) {
-        _conversations.removeIf { it.id == id }
-        if (activeConversationId == id) startNewChat() else persistChatState()
+        if (id.isBlank()) return
+
+        viewModelScope.launch {
+            if (!RetrofitClient.authToken.isNullOrBlank()) {
+                try {
+                    RetrofitClient.instance.deleteConversation(id)
+                } catch (e: HttpException) {
+                    if (e.code() != 404) {
+                        handleHttpError(e, forceLogoutOn401 = false)
+                        return@launch
+                    }
+                } catch (e: Exception) {
+                    errorMessage = e.localizedMessage ?: "Failed to delete conversation."
+                    return@launch
+                }
+            }
+
+            _conversations.removeIf { it.id == id }
+            if (activeConversationId == id) {
+                startNewChat()
+            } else {
+                persistChatState()
+            }
+
+            if (!RetrofitClient.authToken.isNullOrBlank()) {
+                loadConversationsFromBackend()
+            }
+        }
     }
     val activeMessages: List<ChatMessage> get() = _conversations.find { it.id == activeConversationId }?.chatMessages ?: emptyList()
     val filteredConversations: List<Conversation>
@@ -1489,6 +1575,56 @@ class ChatViewModel : ViewModel() {
 
     fun getCurrentAskSessionState(): AskState = aiAskState
 
+    suspend fun ensureActiveConversationForStudyPlan(): String? {
+        return turnMutex.withLock {
+            if (activeConversationId.isNotBlank()) {
+                return@withLock activeConversationId
+            }
+
+            if (!RetrofitClient.hasUsableAuthToken()) {
+                Log.w(TAG, "Cannot bootstrap study-plan conversation: missing/expired token")
+                return@withLock null
+            }
+
+            val turnId = newTurnId("plan-bootstrap")
+            logTurn(turnId, "bootstrap_request")
+
+            try {
+                val response = RetrofitClient.instance.askAI(
+                    AskAiRequest(
+                        message = "Initialize a conversation for study plan tracking. Reply briefly with 'Study plan context ready.'",
+                        title = "Study Plan"
+                    )
+                )
+                val convId = response.conversationId
+                if (_conversations.none { it.id == convId }) {
+                    _conversations.add(
+                        0,
+                        Conversation(
+                            id = convId,
+                            title = "Study Plan",
+                            kind = ConversationKind.PLAN,
+                            autoTitleApplied = true
+                        )
+                    )
+                }
+                activeConversationId = convId
+                _currentChatType.value = ChatScreenType.CONTINUING_CHAT
+                persistChatState()
+                logTurn(turnId, "bootstrap_success", convId, "messageId=${response.messageId}")
+                convId
+            } catch (e: HttpException) {
+                handleHttpError(e, forceLogoutOn401 = false)
+                logTurn(turnId, "bootstrap_http_error", detail = "code=${e.code()}")
+                null
+            } catch (e: Exception) {
+                errorMessage = e.localizedMessage ?: "Failed to initialize study plan conversation."
+                logTurn(turnId, "bootstrap_error", detail = e.javaClass.simpleName)
+                null
+            }
+        }
+    }
+
     @Suppress("unused")
     fun clearAskSession() {
         currentAskSessionId?.let { AiAskService.clearSession(it) }
@@ -1578,6 +1714,7 @@ class ChatViewModel : ViewModel() {
     }
 
     fun sendImageQuestion(context: Context, imageUri: Uri, question: String, conversationId: String? = null) {
+        val turnId = newTurnId("image")
         if (question.isBlank()) {
             errorMessage = "Please enter a question"
             return
@@ -1591,75 +1728,83 @@ class ChatViewModel : ViewModel() {
         }
 
         viewModelScope.launch {
-            isUploading = true
-            isTyping = false
-            uploadStatusLabel = "Processing image..."
-            uploadTerminalStatus = null
-            errorMessage = null
+            turnMutex.withLock {
+                isUploading = true
+                isTyping = false
+                uploadStatusLabel = "Processing image..."
+                uploadTerminalStatus = null
+                errorMessage = null
 
-            try {
-                val conversationForImage = conversationId ?: if (_currentChatType.value == ChatScreenType.NEW_CHAT) {
-                    val newConvId = UUID.randomUUID().toString()
-                    _conversations.add(0, Conversation(newConvId, "", autoTitleApplied = false))
-                    activeConversationId = newConvId
-                    _currentChatType.value = ChatScreenType.CONTINUING_CHAT
-                    newConvId
-                } else {
-                    activeConversationId
-                }
-
-                // Append user message with image info
-                appendUserMessage(conversationForImage, question, "image")
-                persistChatState()
-
-                // Read image file
-                val contentResolver = context.contentResolver
-                val mimeType = contentResolver.getType(imageUri) ?: "image/jpeg"
-                val fileName = runCatching {
-                    contentResolver.query(imageUri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
-                        val index = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                        if (index >= 0 && cursor.moveToFirst()) cursor.getString(index) else null
+                try {
+                    val conversationForImage = conversationId ?: if (_currentChatType.value == ChatScreenType.NEW_CHAT) {
+                        val newConvId = UUID.randomUUID().toString()
+                        _conversations.add(0, Conversation(newConvId, "", autoTitleApplied = false))
+                        activeConversationId = newConvId
+                        _currentChatType.value = ChatScreenType.CONTINUING_CHAT
+                        newConvId
+                    } else {
+                        activeConversationId
                     }
-                }.getOrNull() ?: "image.jpg"
 
-                val bytes = contentResolver.openInputStream(imageUri)?.use { it.readBytes() }
-                    ?: throw IllegalArgumentException("Could not read image file.")
+                    // Append user message with image info
+                    appendUserMessage(conversationForImage, question, "image")
+                    persistChatState()
+                    logTurn(turnId, "user_sent_image", conversationForImage)
 
-                // Call API with multipart
-                val body = bytes.toRequestBody(mimeType.toMediaTypeOrNull())
-                val imagePart = MultipartBody.Part.createFormData("image", fileName, body)
-                val questionBody = question.toRequestBody("text/plain".toMediaTypeOrNull())
+                    // Read image file
+                    val contentResolver = context.contentResolver
+                    val mimeType = contentResolver.getType(imageUri) ?: "image/jpeg"
+                    val fileName = runCatching {
+                        contentResolver.query(imageUri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                            val index = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                            if (index >= 0 && cursor.moveToFirst()) cursor.getString(index) else null
+                        }
+                    }.getOrNull() ?: "image.jpg"
 
-                val response = RetrofitClient.instance.askAIWithImage(
-                    image = imagePart,
-                    question = questionBody,
-                    conversationId = conversationForImage.toRequestBody("text/plain".toMediaTypeOrNull()),
-                    title = question.take(48).toRequestBody("text/plain".toMediaTypeOrNull())
-                )
+                    val bytes = contentResolver.openInputStream(imageUri)?.use { it.readBytes() }
+                        ?: throw IllegalArgumentException("Could not read image file.")
 
-                // Update conversation if created
-                val convIndex = _conversations.indexOfFirst { it.id == response.conversationId }
-                if (convIndex != -1 && _conversations[convIndex].title.isBlank()) {
-                    _conversations[convIndex] = _conversations[convIndex].copy(
-                        title = question.take(48),
-                        autoTitleApplied = true
+                    // Call API with multipart
+                    val body = bytes.toRequestBody(mimeType.toMediaTypeOrNull())
+                    val imagePart = MultipartBody.Part.createFormData("image", fileName, body)
+                    val questionBody = question.toRequestBody("text/plain".toMediaTypeOrNull())
+
+                    val response = RetrofitClient.instance.askAIWithImage(
+                        image = imagePart,
+                        question = questionBody,
+                        conversationId = conversationForImage.toRequestBody("text/plain".toMediaTypeOrNull()),
+                        title = question.take(48).toRequestBody("text/plain".toMediaTypeOrNull())
                     )
+
+                    val resolvedConversationId = rebindConversationId(conversationForImage, response.conversationId)
+
+                    // Update conversation if created
+                    val convIndex = _conversations.indexOfFirst { it.id == resolvedConversationId }
+                    if (convIndex != -1 && _conversations[convIndex].title.isBlank()) {
+                        _conversations[convIndex] = _conversations[convIndex].copy(
+                            title = question.take(48),
+                            autoTitleApplied = true
+                        )
+                    }
+
+                    // Append AI response
+                    appendAiMessage(resolvedConversationId, response.answer, response.messageId)
+                    persistChatState()
+                    logTurn(turnId, "ai_reply_appended", resolvedConversationId, "source=chat_ask_image")
+
+                    uploadTerminalStatus = "COMPLETED"
+                } catch (e: HttpException) {
+                    uploadTerminalStatus = "FAILED"
+                    handleHttpError(e, forceLogoutOn401 = false)
+                    logTurn(turnId, "turn_http_error", conversationId, "code=${e.code()}")
+                } catch (e: Exception) {
+                    uploadTerminalStatus = "FAILED"
+                    errorMessage = e.localizedMessage ?: "Failed to process image question."
+                    logTurn(turnId, "turn_error", conversationId, e.javaClass.simpleName)
+                } finally {
+                    uploadStatusLabel = null
+                    isUploading = false
                 }
-
-                // Append AI response
-                appendAiMessage(response.conversationId, response.answer)
-                persistChatState()
-
-                uploadTerminalStatus = "COMPLETED"
-            } catch (e: HttpException) {
-                uploadTerminalStatus = "FAILED"
-                handleHttpError(e, forceLogoutOn401 = false)
-            } catch (e: Exception) {
-                uploadTerminalStatus = "FAILED"
-                errorMessage = e.localizedMessage ?: "Failed to process image question."
-            } finally {
-                uploadStatusLabel = null
-                isUploading = false
             }
         }
     }

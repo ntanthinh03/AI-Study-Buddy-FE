@@ -87,7 +87,7 @@ interface ApiService {
     @POST("quizzes/generate/{documentId}")
     suspend fun generateQuiz(
         @Path("documentId") documentId: String
-    ): List<QuizQuestion>
+    ): GenerateQuizResponse
 
     @POST("documents/{id}/study-plan")
     suspend fun generateStudyPlan(
@@ -145,6 +145,12 @@ interface ApiService {
         @Path("lessonId") lessonId: String,
         @Body request: SaveLessonQuizRequest
     ): SaveLessonQuizResponse
+
+    @POST("progress/lessons/{lessonId}/status")
+    suspend fun updateProgressLessonStatus(
+        @Path("lessonId") lessonId: String,
+        @Body request: ProgressLessonStatusRequest
+    ): MessageResponse
 
     @GET("conversations")
     suspend fun getConversations(): List<ConversationInfo>

@@ -16,6 +16,7 @@ import com.google.gson.JsonParser
 import com.thinh.aistudybuddy.data.AiAskRequest
 import com.thinh.aistudybuddy.data.ProgressLesson
 import com.thinh.aistudybuddy.data.ProgressLessonRequest
+import com.thinh.aistudybuddy.data.ProgressLessonStatusRequest
 import com.thinh.aistudybuddy.data.SaveLessonQuizRequest
 import com.thinh.aistudybuddy.data.local.CachedLessonEnrichment
 import com.thinh.aistudybuddy.data.local.LocalHistoryStore
@@ -57,6 +58,7 @@ class StudyPlanViewModel : ViewModel() {
     private var backendLessonIdByModuleId by mutableStateOf<Map<String, String>>(emptyMap())
     private var pendingEnrichmentSyncModuleIds by mutableStateOf<Set<String>>(emptySet())
     private var initializedDocuments by mutableStateOf<Set<String>>(emptySet())
+    private var lessonConversationId by mutableStateOf<String?>(null)
     var timeline by mutableStateOf<List<StudyProgressItem>>(emptyList())
         private set
     var loading by mutableStateOf(false)
@@ -169,6 +171,7 @@ class StudyPlanViewModel : ViewModel() {
         val module = currentModules.firstOrNull { it.moduleId == lessonId } ?: return
         val maxScore = (module.quiz?.recommendedQuestionCount ?: 3).coerceAtLeast(1) * 10
         val normalizedScore = (rawScore.coerceAtLeast(0) * 100 / maxScore).coerceIn(0, 100)
+        val backendLessonId = backendLessonIdByModuleId[lessonId]
 
         timeline = upsertTimeline(module.documentId, module.title, normalizedScore)
         persistStudyPlanState()
@@ -187,6 +190,12 @@ class StudyPlanViewModel : ViewModel() {
                     return@launch
                 }
                 RetrofitClient.instance.completeProgress(ProgressCompleteRequest(module.documentId, normalizedScore))
+                if (!backendLessonId.isNullOrBlank()) {
+                    RetrofitClient.instance.updateProgressLessonStatus(
+                        backendLessonId,
+                        ProgressLessonStatusRequest(status = "COMPLETED")
+                    )
+                }
                 refreshProgressTimeline()
             } catch (e: HttpException) {
                 handleHttpError(e)
@@ -251,6 +260,10 @@ class StudyPlanViewModel : ViewModel() {
     fun resolveBackendLessonId(moduleId: String): String? {
         if (moduleId.isBlank()) return null
         return backendLessonIdByModuleId[moduleId]
+    }
+
+    fun setLessonConversationId(conversationId: String?) {
+        lessonConversationId = conversationId?.trim()?.takeIf { it.isNotBlank() }
     }
 
     private val currentModules: List<StudyModule>
@@ -373,11 +386,19 @@ class StudyPlanViewModel : ViewModel() {
             }
         if (existing != null) return existing.id
 
+        val conversationId = lessonConversationId
+        if (conversationId.isNullOrBlank()) {
+            Log.w(TAG, "Skip creating /progress/lessons for module='${module.moduleId}' because conversationId is missing")
+            return null
+        }
+
         val created = RetrofitClient.instance.createProgressLesson(
             ProgressLessonRequest(
-                documentId = module.documentId,
+                conversationId = conversationId,
                 title = module.title,
-                contentText = theory
+                contentText = theory,
+                documentId = module.documentId,
+                status = "IN_PROGRESS"
             )
         )
         return created.id

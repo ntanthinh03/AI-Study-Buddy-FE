@@ -23,6 +23,7 @@ import com.thinh.aistudybuddy.ui.theme.screens.RegisterScreen
 import com.thinh.aistudybuddy.viewmodel.ChatViewModel
 import com.thinh.aistudybuddy.viewmodel.QuizViewModel
 import com.thinh.aistudybuddy.viewmodel.StudyPlanViewModel
+import kotlinx.coroutines.launch
 
 @Composable
 fun AppNavigation(navController: NavHostController, initialDisplayName: String = "") {
@@ -32,6 +33,7 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
     var selectedLessonId by remember { mutableStateOf<String?>(null) }
     var displayName by remember { mutableStateOf(initialDisplayName) }
     var inboxBootstrapped by remember { mutableStateOf(false) }
+    val navScope = rememberCoroutineScope()
     val forceLogin = {
         chatViewModel.resetForAccountSwitch()
         RetrofitClient.authToken = null
@@ -153,7 +155,17 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
                 onStartQuiz = { navController.navigate("quiz") },
                 onAccountClick = { navController.navigate("account") },
                 onSettingsClick = { navController.navigate("settings") },
-                onStudyPlanClick = { navController.navigate("study_plan") },
+                onStudyPlanClick = {
+                    navScope.launch {
+                        val conversationId = if (chatViewModel.activeConversationId.isBlank()) {
+                            chatViewModel.ensureActiveConversationForStudyPlan()
+                        } else {
+                            chatViewModel.activeConversationId
+                        }
+                        studyViewModel.setLessonConversationId(conversationId)
+                        navController.navigate("study_plan")
+                    }
+                },
                 onConversationHistoryClick = { conversationId -> navController.navigate("conversation_history/$conversationId") },
                 onSessionExpired = forceLogin,
                 viewModel = chatViewModel
@@ -163,10 +175,18 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
             StudyPlanScreen(
                 onBack = { navController.popBackStack() },
                 onLearnClick = { lesson ->
-                    selectedLessonId = lesson.id
-                    studyViewModel.ensureLessonEnriched(lesson.id)
-                    studyViewModel.markModuleStarted(lesson.documentId)
-                    navController.navigate("lesson_learn")
+                    navScope.launch {
+                        selectedLessonId = lesson.id
+                        val conversationId = if (chatViewModel.activeConversationId.isBlank()) {
+                            chatViewModel.ensureActiveConversationForStudyPlan()
+                        } else {
+                            chatViewModel.activeConversationId
+                        }
+                        studyViewModel.setLessonConversationId(conversationId)
+                        studyViewModel.ensureLessonEnriched(lesson.id)
+                        studyViewModel.markModuleStarted(lesson.documentId)
+                        navController.navigate("lesson_learn")
+                    }
                 },
                 studyViewModel = studyViewModel
             )
@@ -212,6 +232,7 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
                     navController.popBackStack()
                 },
                 onOpenLesson = { planRawJson, lessonId ->
+                    studyViewModel.setLessonConversationId(conversationId)
                     studyViewModel.loadStudyPlanFromJson(planRawJson)
                     selectedLessonId = lessonId
                     studyViewModel.ensureLessonEnriched(lessonId)

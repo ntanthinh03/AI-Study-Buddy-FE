@@ -122,6 +122,12 @@ data class AiAskSession(
 
 data class QuizQuestion(val question: String, val options: Map<String, String>, val correctAnswer: String, val explanation: String)
 
+data class GenerateQuizResponse(
+    val quizId: String,
+    val conversationId: String,
+    val questions: List<QuizQuestion>
+)
+
 data class Quiz(val id: String, val title: String, val documentId: String, val questions: List<QuizQuestion>)
 
 data class ConversationInfo(
@@ -155,17 +161,21 @@ data class SaveDocumentArtifactRequest(
 )
 
 data class ProgressLessonRequest(
-    val documentId: String,
+    val conversationId: String,
     val title: String,
-    val contentText: String
+    val contentText: String,
+    val documentId: String? = null,
+    val status: String? = null
 )
 
 data class ProgressLesson(
     val id: String,
     val userId: String,
+    val conversationId: String,
     val documentId: String? = null,
     val title: String,
     val contentText: String,
+    val status: String? = null,
     val quizJson: JsonElement? = null,
     val lastStudiedAt: String? = null,
     val createdAt: String? = null,
@@ -180,6 +190,10 @@ data class SaveLessonQuizResponse(
     val message: String,
     val lessonId: String,
     val quizCount: Int
+)
+
+data class ProgressLessonStatusRequest(
+    val status: String
 )
 
 data class ImageMessageResponse(

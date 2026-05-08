@@ -58,7 +58,6 @@ val DEFAULT_STUDY_PLAN_JSON = """
 }
 """
 
-
 data class ModuleQuizConfig(
     @SerializedName("recommendedQuestionCount")
     val recommendedQuestionCount: Int,
@@ -99,7 +98,6 @@ data class StudyPlanResponse(
     @SerializedName("modules")
     val modules: List<StudyModule>
 )
-
 
 object StudyPlanJsonParser {
     private val gson = GsonBuilder().create()

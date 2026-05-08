@@ -1,4 +1,4 @@
-package com.thinh.aistudybuddy.ui.screens
+package com.thinh.aistudybuddy.ui.theme.screens
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas

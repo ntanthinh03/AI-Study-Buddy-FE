@@ -10,6 +10,8 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MicNone
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -25,10 +27,12 @@ import androidx.compose.ui.unit.dp
 fun ChatInputBar(
     inputText: String,
     pendingAttachmentName: String?,
+    isListening: Boolean = false,
     onInputTextChange: (String) -> Unit,
     onSendMessageClick: () -> Unit,
     onRemoveAttachment: () -> Unit,
-    onAddClick: () -> Unit = {}
+    onAddClick: () -> Unit = {},
+    onMicClick: () -> Unit = {}
 ) {
     val canSend = inputText.isNotBlank() || !pendingAttachmentName.isNullOrBlank()
 
@@ -90,6 +94,14 @@ fun ChatInputBar(
                     if (canSend) onSendMessageClick()
                 })
             )
+
+            IconButton(onClick = onMicClick) {
+                Icon(
+                    imageVector = if (isListening) Icons.Default.Mic else Icons.Default.MicNone,
+                    contentDescription = "Voice Input",
+                    tint = if (isListening) Color(0xFF00E5FF) else Color.Gray
+                )
+            }
 
             Box(
                 modifier = Modifier

@@ -1,7 +1,12 @@
 @file:Suppress("unused", "UNUSED_VALUE")
 
-package com.thinh.aistudybuddy.ui.screens
+package com.thinh.aistudybuddy.ui.theme.screens
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.speech.tts.TextToSpeech
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -24,17 +29,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import com.thinh.aistudybuddy.ui.components.*
 import com.thinh.aistudybuddy.data.models.*
-import com.thinh.aistudybuddy.viewmodel.ChatScreenType
-import com.thinh.aistudybuddy.viewmodel.ChatViewModel
-import com.thinh.aistudybuddy.viewmodel.QuizViewModel
-import com.thinh.aistudybuddy.viewmodel.StudyPlanViewModel
+import com.thinh.aistudybuddy.ui.utils.VoiceManager
+import com.thinh.aistudybuddy.viewmodel.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,14 +50,56 @@ fun ChatScreen(
     onAccountClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onStudyPlanClick: () -> Unit,
+    onFlashcardsClick: () -> Unit,
+    onAnalyticsClick: () -> Unit,
+    onDailySessionClick: () -> Unit,
+    onFocusClick: () -> Unit,
+    onLeaderboardClick: () -> Unit,
+    onMockExamClick: () -> Unit,
+    onStudyRoomClick: () -> Unit,
     onConversationHistoryClick: (String) -> Unit,
     onSessionExpired: () -> Unit,
+    analyticsViewModel: AnalyticsViewModel = viewModel(),
+    flashcardViewModel: FlashcardViewModel = viewModel(),
     viewModel: ChatViewModel = viewModel()
 ) {
+    LaunchedEffect(Unit) {
+        analyticsViewModel.loadDashboard()
+    }
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var inputText by remember { mutableStateOf("") }
+
+    val voiceManager = remember { VoiceManager(context) }
+    var tts: TextToSpeech? by remember { mutableStateOf(null) }
+    
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            voiceManager.startListening()
+        }
+    }
+
+    DisposableEffect(Unit) {
+        tts = TextToSpeech(context) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                tts?.language = Locale.getDefault()
+            }
+        }
+        onDispose {
+            voiceManager.destroy()
+            tts?.stop()
+            tts?.shutdown()
+        }
+    }
+
+    LaunchedEffect(voiceManager.recognizedText) {
+        if (voiceManager.recognizedText.isNotBlank()) {
+            inputText = voiceManager.recognizedText
+        }
+    }
     var showMenu by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -84,7 +129,6 @@ fun ChatScreen(
                     val pdfFileName = fileName ?: "attachment.pdf"
                     viewModel.setPendingPdf(uri, pdfFileName)
                 } else if (mimeType?.startsWith("image/") == true || hasAllowedExtension) {
-                    // For images, ensure we have a filename with proper extension
                     val imageName = fileName ?: when {
                         uriPath.endsWith(".png") -> "image.png"
                         uriPath.endsWith(".jpg") -> "image.jpg"
@@ -93,7 +137,6 @@ fun ChatScreen(
                         uriPath.endsWith(".gif") -> "image.gif"
                         else -> "image.jpg"
                     }
-                    // Store pending image for image chat
                     pendingImageUri = uri
                     pendingImageName = imageName
                 } else {
@@ -124,7 +167,6 @@ fun ChatScreen(
             studyPlanViewModel.loadStudyPlanFromJson(rawJson)
         }
     }
-
 
     LaunchedEffect(viewModel.sessionExpired) {
         if (viewModel.sessionExpired) {
@@ -212,12 +254,18 @@ fun ChatScreen(
                 },
                 onSearchQueryChange = { viewModel.updateSearchQuery(it) },
                 onAccountClick = { scope.launch { drawerState.close() }; onAccountClick() },
-                onSettingsClick = { scope.launch { drawerState.close() }; onSettingsClick() }
+                onSettingsClick = { scope.launch { drawerState.close() }; onSettingsClick() },
+                onFlashcardsClick = { scope.launch { drawerState.close() }; onFlashcardsClick() },
+                onAnalyticsClick = { scope.launch { drawerState.close() }; onAnalyticsClick() },
+                onDailySessionClick = { scope.launch { drawerState.close() }; onDailySessionClick() },
+                onFocusClick = { scope.launch { drawerState.close() }; onFocusClick() },
+                onLeaderboardClick = { scope.launch { drawerState.close() }; onLeaderboardClick() },
+                onMockExamClick = { scope.launch { drawerState.close() }; onMockExamClick() },
+                onStudyRoomClick = { scope.launch { drawerState.close() }; onStudyRoomClick() }
             )
         }
     ) {
         Column(modifier = Modifier.fillMaxSize().background(Color(0xFF121212))) {
-            // Upload status banner removed - status now shown in AI chat bubble
             viewModel.errorMessage?.let { message ->
                 Surface(color = Color(0xFF2C2C2E)) {
                     Text(
@@ -276,7 +324,24 @@ fun ChatScreen(
                             }
                         }
                     } else {
-                        Box(modifier = Modifier.padding(end = 12.dp)) { UserAvatar(size = 32.dp, onClick = onProfileClick) }
+                        val streak = analyticsViewModel.gamificationStats?.currentStreak ?: 0
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 8.dp)) {
+                            if (streak > 0) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .background(Color(0xFFFF9800).copy(alpha = 0.15f), RoundedCornerShape(16.dp))
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                        .clickable { onDailySessionClick() }
+                                ) {
+                                    Icon(Icons.Default.Whatshot, null, tint = Color(0xFFFF9800), modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(text = "$streak", color = Color(0xFFFF9800), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                            }
+                            UserAvatar(size = 32.dp, onClick = onProfileClick)
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
@@ -326,6 +391,13 @@ fun ChatScreen(
                                     }
                                     studyPlanViewModel.refreshProgressTimeline()
                                     onStudyPlanClick()
+                                },
+                                onGenerateFlashcards = { docId ->
+                                    flashcardViewModel.generateFlashcards(docId)
+                                    onFlashcardsClick()
+                                },
+                                onSpeakClick = { text ->
+                                    tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, null)
                                 }
                             )
                         }
@@ -345,7 +417,6 @@ fun ChatScreen(
                 }
             }
 
-            // Image Chat Input (for pending image)
             if (pendingImageUri != null) {
                 Surface(color = Color(0xFF2C2C2E)) {
                     Column(modifier = Modifier.padding(16.dp)) {
@@ -379,7 +450,6 @@ fun ChatScreen(
                                 )
                             )
                             
-                            // Cancel button
                             IconButton(
                                 onClick = {
                                     pendingImageUri = null
@@ -390,7 +460,6 @@ fun ChatScreen(
                                 Icon(Icons.Default.Close, contentDescription = "Cancel", tint = Color.Gray)
                             }
                             
-                            // Send button
                             Box(
                                 modifier = Modifier
                                     .size(40.dp)
@@ -429,11 +498,9 @@ fun ChatScreen(
                         }
                     },
                     onRemoveAttachment = { viewModel.clearPendingPdf() },
-                    onAddClick = { filePickerLauncher.launch("*/*") }
+                    onAddClick = { filePickerLauncher.launch("application/pdf") }
                 )
             }
-
         }
     }
 }
-

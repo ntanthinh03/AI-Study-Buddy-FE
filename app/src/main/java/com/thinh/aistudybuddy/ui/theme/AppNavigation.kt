@@ -14,16 +14,8 @@ import com.thinh.aistudybuddy.data.local.LocalHistoryStore
 import com.thinh.aistudybuddy.data.local.SessionStore
 import com.thinh.aistudybuddy.data.local.TokenDataStore
 import com.thinh.aistudybuddy.data.network.RetrofitClient
-import com.thinh.aistudybuddy.ui.screens.*
-import com.thinh.aistudybuddy.ui.theme.screens.ChangePasswordScreen
-import com.thinh.aistudybuddy.ui.theme.screens.ForgotPasswordOtpScreen
-import com.thinh.aistudybuddy.ui.theme.screens.ForgotPasswordResetScreen
-import com.thinh.aistudybuddy.ui.theme.screens.ForgotPasswordScreen
-import com.thinh.aistudybuddy.ui.theme.screens.LoginScreen
-import com.thinh.aistudybuddy.ui.theme.screens.RegisterScreen
-import com.thinh.aistudybuddy.viewmodel.ChatViewModel
-import com.thinh.aistudybuddy.viewmodel.QuizViewModel
-import com.thinh.aistudybuddy.viewmodel.StudyPlanViewModel
+import com.thinh.aistudybuddy.ui.theme.screens.*
+import com.thinh.aistudybuddy.viewmodel.*
 import com.thinh.aistudybuddy.data.models.*
 import com.google.gson.Gson
 import com.google.gson.JsonArray
@@ -37,6 +29,10 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
     val studyViewModel: StudyPlanViewModel = viewModel()
     val quizViewModel: QuizViewModel = viewModel()
     val chatViewModel: ChatViewModel = viewModel()
+    val flashcardViewModel: FlashcardViewModel = viewModel()
+    val analyticsViewModel: AnalyticsViewModel = viewModel()
+    val focusViewModel: FocusViewModel = viewModel()
+    val leaderboardViewModel: LeaderboardViewModel = viewModel()
     var selectedLessonId by remember { mutableStateOf<String?>(null) }
     var displayName by remember { mutableStateOf(initialDisplayName) }
     var inboxBootstrapped by remember { mutableStateOf(false) }
@@ -163,6 +159,11 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
                 onStartQuiz = { navController.navigate("quiz") },
                 onAccountClick = { navController.navigate("account") },
                 onSettingsClick = { navController.navigate("settings") },
+                onFlashcardsClick = { navController.navigate("flashcards") },
+                onAnalyticsClick = { navController.navigate("analytics") },
+                onDailySessionClick = { navController.navigate("daily_session") },
+                onFocusClick = { navController.navigate("focus") },
+                onLeaderboardClick = { navController.navigate("leaderboard") },
                 onStudyPlanClick = {
                     navScope.launch {
                         val conversationId = if (chatViewModel.activeConversationId.isBlank()) {
@@ -170,20 +171,22 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
                         } else {
                             chatViewModel.activeConversationId
                         }
-                        if (conversationId.isNullOrBlank()) return@launch
                         studyViewModel.updateLessonConversationId(conversationId)
                         navController.navigate("study_plan")
                     }
                 },
-                onConversationHistoryClick = { conversationId -> navController.navigate("conversation_history/$conversationId") },
+                onMockExamClick = { navController.navigate("mock_exam") },
+                onStudyRoomClick = { navController.navigate("study_room") },
+                onConversationHistoryClick = { conversationId: String -> navController.navigate("conversation_history/$conversationId") },
                 onSessionExpired = forceLogin,
+                flashcardViewModel = flashcardViewModel,
                 viewModel = chatViewModel
             )
         }
         composable("study_plan") {
             StudyPlanScreen(
                 onBack = { navController.popBackStack() },
-                onLearnClick = { lesson ->
+                onLearnClick = { lesson: Lesson ->
                     navScope.launch {
                         selectedLessonId = lesson.id
                         val conversationId = if (chatViewModel.activeConversationId.isBlank()) {
@@ -198,7 +201,10 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
                         navController.navigate("lesson_learn")
                     }
                 },
-                studyViewModel = studyViewModel
+                studyViewModel = studyViewModel,
+                onMindMapClick = { docId, docName ->
+                    navController.navigate("mind_map/$docId/$docName")
+                }
             )
         }
         composable("lesson_learn") {
@@ -229,6 +235,32 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
         composable("quiz") {
             QuizScreen(viewModel = quizViewModel, onCloseClick = { navController.popBackStack() })
         }
+        composable("mock_exam") {
+            com.thinh.aistudybuddy.ui.theme.screens.MockExamScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        composable("study_room") {
+            StudyRoomScreen(
+                onNavigateBack = { navController.popBackStack() },
+                userDisplayName = displayName
+            )
+        }
+        composable(
+            route = "mind_map/{documentId}/{documentName}",
+            arguments = listOf(
+                navArgument("documentId") { type = NavType.StringType },
+                navArgument("documentName") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val documentId = backStackEntry.arguments?.getString("documentId") ?: ""
+            val documentName = backStackEntry.arguments?.getString("documentName") ?: ""
+            MindMapScreen(
+                documentId = documentId,
+                documentName = documentName,
+                onBack = { navController.popBackStack() }
+            )
+        }
         composable("settings") { SettingsScreen(onBack = { navController.popBackStack() }) }
         composable(
             route = "conversation_history/{conversationId}",
@@ -238,11 +270,11 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
             ConversationHistoryScreen(
                 conversationId = conversationId,
                 onBack = { navController.popBackStack() },
-                onOpenConversation = { conversationId ->
+                onOpenConversation = { conversationId: String ->
                     chatViewModel.selectConversation(conversationId)
                     navController.popBackStack()
                 },
-                onOpenLesson = { planRawJson, lessonId ->
+                onOpenLesson = { planRawJson: String, lessonId: String ->
                     studyViewModel.updateLessonConversationId(conversationId)
                     studyViewModel.loadStudyPlanFromJson(planRawJson)
                     selectedLessonId = lessonId
@@ -254,15 +286,14 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
                     navController.navigate("lesson_learn")
                 },
                 timelineStatusByDocumentId = studyViewModel.timeline.associate { it.documentId to it.status },
-                onRefresh = { conversationId ->
+                onRefresh = { conversationId: String ->
                     chatViewModel.refreshConversationMessages(conversationId)
                     studyViewModel.refreshProgressTimeline()
                 },
-                onStartQuiz = { message ->
+                onStartQuiz = { message: ChatMessage ->
                     val quizJson = message.planJson
                     if (!quizJson.isNullOrBlank()) {
-                        // Attempt to parse quiz questions from the message's planJson
-                        val questions = parseQuizFromJson(quizJson)
+                        val questions = parseQuizFromJson(quizJson!!)
                         if (questions.isNotEmpty()) {
                             quizViewModel.loadQuestions(
                                 newQuestions = questions,
@@ -271,11 +302,10 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
                             navController.navigate("quiz")
                         }
                     } else if (message.showQuizButton) {
-                        // Fallback if planJson is missing but it's a quiz message
                         navController.navigate("quiz")
                     }
                 },
-                onCheckPlan = { planJson ->
+                onCheckPlan = { planJson: String? ->
                     if (!planJson.isNullOrBlank()) {
                         studyViewModel.loadStudyPlanFromJson(planJson)
                         studyViewModel.refreshProgressTimeline()
@@ -298,6 +328,37 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
             ChangePasswordScreen(
                 onBack = { navController.popBackStack() },
                 onSessionExpired = forceLogin
+            )
+        }
+        composable("flashcards") {
+            FlashcardScreen(
+                onBackClick = { navController.popBackStack() },
+                viewModel = flashcardViewModel
+            )
+        }
+        composable("analytics") {
+            AnalyticsScreen(
+                onBack = { navController.popBackStack() },
+                viewModel = analyticsViewModel
+            )
+        }
+        composable("daily_session") {
+            val dailyViewModel: DailySessionViewModel = viewModel()
+            DailySessionScreen(
+                onBack = { navController.popBackStack() },
+                viewModel = dailyViewModel
+            )
+        }
+        composable("focus") {
+            FocusScreen(
+                onBackClick = { navController.popBackStack() },
+                viewModel = focusViewModel
+            )
+        }
+        composable("leaderboard") {
+            LeaderboardScreen(
+                onBackClick = { navController.popBackStack() },
+                viewModel = leaderboardViewModel
             )
         }
     }

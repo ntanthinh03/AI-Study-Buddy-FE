@@ -1,4 +1,4 @@
-package com.thinh.aistudybuddy.ui.screens
+package com.thinh.aistudybuddy.ui.theme.screens
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
@@ -89,7 +89,16 @@ fun ConversationHistoryScreen(
     }
 
     val conversation = chatViewModel.conversations.firstOrNull { it.id == conversationId }
-    val historyItems = conversation?.chatMessages.orEmpty().filter { it.showQuizButton || it.showStudyPlanButton }
+    val historyItems = conversation?.chatMessages.orEmpty()
+        .filter { it.showQuizButton || it.showStudyPlanButton }
+        .distinctBy { message ->
+            // Deduplicate by content to avoid showing the same quiz/plan multiple times
+            when {
+                message.showQuizButton -> "quiz_${message.artifactJson.hashCode()}_${message.attachmentName}"
+                message.showStudyPlanButton -> "plan_${message.planJson.hashCode()}"
+                else -> message.id
+            }
+        }
     val conversationPlans = chatViewModel.getConversationStudyPlans(conversationId)
     val screenTitle = if (conversation?.autoTitleApplied == true && conversation.title.isNotBlank()) {
         conversation.title
@@ -98,9 +107,9 @@ fun ConversationHistoryScreen(
     }
     val summaryText = when (viewMode) {
         HistoryViewMode.ARTIFACTS -> if (historyItems.isEmpty()) {
-            "No quiz or study plan history yet."
+            "No unique quiz or study plan history yet."
         } else {
-            "${historyItems.size} history item(s)"
+            "${historyItems.size} artifact(s) found"
         }
         HistoryViewMode.COURSES -> if (conversationPlans.isEmpty()) {
             "No study plan found in this conversation."
@@ -315,11 +324,20 @@ private fun HistoryArtifactCard(
         else -> Triple(Icons.Default.School, "Study Plan", Color(0xFF4CAF50))
     }
 
-    // Try to find a specific name for the quiz/course
+    val planTitleFromJson = remember(message.planJson) {
+        if (message.planJson.isNullOrBlank()) null
+        else runCatching<String?> { 
+            com.google.gson.JsonParser().parse(message.planJson).asJsonObject.get("title")?.asString 
+        }.getOrNull()
+    }
+
     val specificName = when {
+        !planTitleFromJson.isNullOrBlank() -> planTitleFromJson
         !message.specificTitle.isNullOrBlank() -> message.specificTitle
         !message.messageLabel.isNullOrBlank() -> message.messageLabel
-        !message.attachmentName.isNullOrBlank() -> message.attachmentName
+        !message.attachmentName.isNullOrBlank() -> {
+            if (isQuiz) "Quiz: ${message.attachmentName}" else "Plan: ${message.attachmentName}"
+        }
         message.courses.isNotEmpty() -> message.courses.first().title
         else -> null
     }
@@ -336,18 +354,25 @@ private fun HistoryArtifactCard(
                 Icon(imageVector = icon, contentDescription = null, tint = accent, modifier = Modifier.size(20.dp))
                 Spacer(modifier = Modifier.size(10.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    if (specificName != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = specificName,
+                            text = specificName ?: title,
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp,
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
                         )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = message.createdAt,
+                            color = Color.Gray,
+                            fontSize = 11.sp
+                        )
+                    }
+                    if (specificName != null) {
                         Text(text = title, color = accent, fontSize = 11.sp, fontWeight = FontWeight.Medium)
-                    } else {
-                        Text(text = title, color = Color.White, fontWeight = FontWeight.Bold)
                     }
                 }
                 Icon(
@@ -511,7 +536,4 @@ private fun LessonItemCard(
         }
     }
 }
-
-
-
 

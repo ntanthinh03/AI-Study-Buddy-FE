@@ -1,0 +1,52 @@
+com.thinh.aistudybuddy.app-savedstate-0 C:\Users\Admin\.gradle\caches\8.13\transforms\0234406452eeca019ddbe5e76d0bdf73\transformed\savedstate\res
+com.thinh.aistudybuddy.app-material-release-1 C:\Users\Admin\.gradle\caches\8.13\transforms\050a290f9ed30a106c28622a92908b19\transformed\material-release\res
+com.thinh.aistudybuddy.app-navigation-common-2.7.7-2 C:\Users\Admin\.gradle\caches\8.13\transforms\0eb88145931b914e94f3a39e95ee76e0\transformed\navigation-common-2.7.7\res
+com.thinh.aistudybuddy.app-lifecycle-viewmodel-3 C:\Users\Admin\.gradle\caches\8.13\transforms\103541b521b25f99f6388320427b518e\transformed\lifecycle-viewmodel\res
+com.thinh.aistudybuddy.app-lifecycle-livedata-core-ktx-2.10.0-4 C:\Users\Admin\.gradle\caches\8.13\transforms\1df7e2725077a991c700a4917367a9c7\transformed\lifecycle-livedata-core-ktx-2.10.0\res
+com.thinh.aistudybuddy.app-navigationevent-5 C:\Users\Admin\.gradle\caches\8.13\transforms\223607ce97830ca7aebf55b36cffd72f\transformed\navigationevent\res
+com.thinh.aistudybuddy.app-navigation-runtime-ktx-2.7.7-6 C:\Users\Admin\.gradle\caches\8.13\transforms\2cba257de8bfac2153004547a2ee4d0a\transformed\navigation-runtime-ktx-2.7.7\res
+com.thinh.aistudybuddy.app-core-1.18.0-7 C:\Users\Admin\.gradle\caches\8.13\transforms\389d0aaa95898dbf0118311e95543198\transformed\core-1.18.0\res
+com.thinh.aistudybuddy.app-customview-poolingcontainer-1.0.0-8 C:\Users\Admin\.gradle\caches\8.13\transforms\3b7c91e153fbf7fbd61f561637a14b0a\transformed\customview-poolingcontainer-1.0.0\res
+com.thinh.aistudybuddy.app-ui-graphics-release-9 C:\Users\Admin\.gradle\caches\8.13\transforms\3c6c11b1ec99bfac6ec6a77c0a66145e\transformed\ui-graphics-release\res
+com.thinh.aistudybuddy.app-activity-1.13.0-10 C:\Users\Admin\.gradle\caches\8.13\transforms\49afb30b77f2727c038243235b0330d0\transformed\activity-1.13.0\res
+com.thinh.aistudybuddy.app-lifecycle-livedata-2.10.0-11 C:\Users\Admin\.gradle\caches\8.13\transforms\4abfed38cdf9d42861296efbe00e70f2\transformed\lifecycle-livedata-2.10.0\res
+com.thinh.aistudybuddy.app-material-ripple-release-12 C:\Users\Admin\.gradle\caches\8.13\transforms\4c040154f7f4004d241e0868ae4a33b6\transformed\material-ripple-release\res
+com.thinh.aistudybuddy.app-navigation-common-ktx-2.7.7-13 C:\Users\Admin\.gradle\caches\8.13\transforms\4c394d74ee25bb0f89f0ea17168fd666\transformed\navigation-common-ktx-2.7.7\res
+com.thinh.aistudybuddy.app-appcompat-resources-1.6.1-14 C:\Users\Admin\.gradle\caches\8.13\transforms\4da3c66922b44d5f21b48bd22fa31648\transformed\appcompat-resources-1.6.1\res
+com.thinh.aistudybuddy.app-material-icons-extended-release-15 C:\Users\Admin\.gradle\caches\8.13\transforms\5ea84885628cc84e194b85e73efcedc5\transformed\material-icons-extended-release\res
+com.thinh.aistudybuddy.app-profileinstaller-1.4.0-16 C:\Users\Admin\.gradle\caches\8.13\transforms\5f814dda6f6e92662f6cac4e9afcd208\transformed\profileinstaller-1.4.0\res
+com.thinh.aistudybuddy.app-lifecycle-viewmodel-ktx-2.10.0-17 C:\Users\Admin\.gradle\caches\8.13\transforms\63eb854f5f153c4c9196d8eff1b538bd\transformed\lifecycle-viewmodel-ktx-2.10.0\res
+com.thinh.aistudybuddy.app-emoji2-views-helper-1.4.0-18 C:\Users\Admin\.gradle\caches\8.13\transforms\738736d6bf51346580e376e4aa1ce68b\transformed\emoji2-views-helper-1.4.0\res
+com.thinh.aistudybuddy.app-coil-base-2.4.0-19 C:\Users\Admin\.gradle\caches\8.13\transforms\79c7f2b12b8d406bb06fcaad0d6ba006\transformed\coil-base-2.4.0\res
+com.thinh.aistudybuddy.app-ui-test-manifest-1.9.2-20 C:\Users\Admin\.gradle\caches\8.13\transforms\830a1debc6f5af85f2a458cc5b0590eb\transformed\ui-test-manifest-1.9.2\res
+com.thinh.aistudybuddy.app-navigation-compose-2.7.7-21 C:\Users\Admin\.gradle\caches\8.13\transforms\83f8a496bdebc37bf532030c277e5d0f\transformed\navigation-compose-2.7.7\res
+com.thinh.aistudybuddy.app-foundation-release-22 C:\Users\Admin\.gradle\caches\8.13\transforms\849410594d5e384c52c43aeb945311e3\transformed\foundation-release\res
+com.thinh.aistudybuddy.app-graphics-path-1.0.1-23 C:\Users\Admin\.gradle\caches\8.13\transforms\8ff364ccff0b0edc1319b53a130670ab\transformed\graphics-path-1.0.1\res
+com.thinh.aistudybuddy.app-annotation-experimental-1.4.1-24 C:\Users\Admin\.gradle\caches\8.13\transforms\94430966eff04a497f32cfd2b0c526d9\transformed\annotation-experimental-1.4.1\res
+com.thinh.aistudybuddy.app-core-runtime-2.2.0-25 C:\Users\Admin\.gradle\caches\8.13\transforms\954b15268bac0575927164089a2afb43\transformed\core-runtime-2.2.0\res
+com.thinh.aistudybuddy.app-material3-26 C:\Users\Admin\.gradle\caches\8.13\transforms\9d8f7507c18775b855814175203e13cc\transformed\material3\res
+com.thinh.aistudybuddy.app-lifecycle-process-2.10.0-27 C:\Users\Admin\.gradle\caches\8.13\transforms\a1d4d1727cc141e466fee99be2a28852\transformed\lifecycle-process-2.10.0\res
+com.thinh.aistudybuddy.app-appcompat-1.6.1-28 C:\Users\Admin\.gradle\caches\8.13\transforms\a2da65202d48d099ac9698a85c3da2d8\transformed\appcompat-1.6.1\res
+com.thinh.aistudybuddy.app-startup-runtime-1.1.1-29 C:\Users\Admin\.gradle\caches\8.13\transforms\a4e01c3ed05a841dceea17bd32430abe\transformed\startup-runtime-1.1.1\res
+com.thinh.aistudybuddy.app-core-viewtree-1.0.0-30 C:\Users\Admin\.gradle\caches\8.13\transforms\b11af9765f20487702b9a3d754710c42\transformed\core-viewtree-1.0.0\res
+com.thinh.aistudybuddy.app-core-ktx-1.18.0-31 C:\Users\Admin\.gradle\caches\8.13\transforms\b334b93838a9fa3c0aa2dd65bab17777\transformed\core-ktx-1.18.0\res
+com.thinh.aistudybuddy.app-emoji2-1.4.0-32 C:\Users\Admin\.gradle\caches\8.13\transforms\b3a084185d5d41ba2eea4b82d5f4f8db\transformed\emoji2-1.4.0\res
+com.thinh.aistudybuddy.app-savedstate-ktx-1.4.0-33 C:\Users\Admin\.gradle\caches\8.13\transforms\b4370263e8d9293eec75eb0d2f89878f\transformed\savedstate-ktx-1.4.0\res
+com.thinh.aistudybuddy.app-ui-release-34 C:\Users\Admin\.gradle\caches\8.13\transforms\b667ce57b92c75833a1813c0bca4ad0d\transformed\ui-release\res
+com.thinh.aistudybuddy.app-material-icons-core-release-35 C:\Users\Admin\.gradle\caches\8.13\transforms\c4094274f9a556e72cbad375a4081125\transformed\material-icons-core-release\res
+com.thinh.aistudybuddy.app-lifecycle-runtime-36 C:\Users\Admin\.gradle\caches\8.13\transforms\c63ff0fbee391da0249b8840061601e5\transformed\lifecycle-runtime\res
+com.thinh.aistudybuddy.app-tracing-1.2.0-37 C:\Users\Admin\.gradle\caches\8.13\transforms\ca3a4fa4268f9e278fba3ae73f0150c9\transformed\tracing-1.2.0\res
+com.thinh.aistudybuddy.app-lifecycle-livedata-core-2.10.0-38 C:\Users\Admin\.gradle\caches\8.13\transforms\e66db91cf0cde98dfa5fba701db41fb4\transformed\lifecycle-livedata-core-2.10.0\res
+com.thinh.aistudybuddy.app-navigation-runtime-2.7.7-39 C:\Users\Admin\.gradle\caches\8.13\transforms\e704032c692e69254df427dcca9eae18\transformed\navigation-runtime-2.7.7\res
+com.thinh.aistudybuddy.app-constraintlayout-2.2.1-40 C:\Users\Admin\.gradle\caches\8.13\transforms\f076e53d376c088c8ed14bb9c1b50a6d\transformed\constraintlayout-2.2.1\res
+com.thinh.aistudybuddy.app-activity-compose-1.13.0-41 C:\Users\Admin\.gradle\caches\8.13\transforms\f15c8af50913c22c0e59538d09cb2847\transformed\activity-compose-1.13.0\res
+com.thinh.aistudybuddy.app-fragment-1.3.6-42 C:\Users\Admin\.gradle\caches\8.13\transforms\f1d9154bf3e02609f9ae2d38a131093f\transformed\fragment-1.3.6\res
+com.thinh.aistudybuddy.app-activity-ktx-1.13.0-43 C:\Users\Admin\.gradle\caches\8.13\transforms\fd0737a902dfc51d4925302da5f2d5e3\transformed\activity-ktx-1.13.0\res
+com.thinh.aistudybuddy.app-debug-44 E:\BCU\KLTN\Buddy App Mobile\FEBuddy\app\src\debug\res
+com.thinh.aistudybuddy.app-main-45 E:\BCU\KLTN\Buddy App Mobile\FEBuddy\app\src\main\res
+com.thinh.aistudybuddy.app-pngs-46 E:\BCU\KLTN\Buddy App Mobile\FEBuddy\build\app-module\generated\res\pngs\debug
+com.thinh.aistudybuddy.app-resValues-47 E:\BCU\KLTN\Buddy App Mobile\FEBuddy\build\app-module\generated\res\resValues\debug
+com.thinh.aistudybuddy.app-updated_navigation_xml-48 E:\BCU\KLTN\Buddy App Mobile\FEBuddy\build\app-module\generated\updated_navigation_xml\debug
+com.thinh.aistudybuddy.app-packageDebugResources-49 E:\BCU\KLTN\Buddy App Mobile\FEBuddy\build\app-module\intermediates\incremental\debug\packageDebugResources\merged.dir
+com.thinh.aistudybuddy.app-packageDebugResources-50 E:\BCU\KLTN\Buddy App Mobile\FEBuddy\build\app-module\intermediates\incremental\debug\packageDebugResources\stripped.dir
+com.thinh.aistudybuddy.app-debug-51 E:\BCU\KLTN\Buddy App Mobile\FEBuddy\build\app-module\intermediates\merged_res\debug\mergeDebugResources

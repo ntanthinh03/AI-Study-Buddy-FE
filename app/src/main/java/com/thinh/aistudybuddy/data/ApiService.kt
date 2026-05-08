@@ -5,6 +5,7 @@ package com.thinh.aistudybuddy.data
 import com.thinh.aistudybuddy.data.models.*
 import okhttp3.MultipartBody
 import okhttp3.ResponseBody
+import retrofit2.Response
 import retrofit2.http.*
 
 interface ApiService {
@@ -137,6 +138,11 @@ interface ApiService {
         @Path("lessonId") lessonId: String
     ): ProgressLesson
 
+    @POST("documents/{id}/mindmap")
+    suspend fun generateMindMap(
+        @Path("id") id: String
+    ): Response<MindMapResponse>
+
     @POST("progress/lessons/{lessonId}/quiz")
     suspend fun saveProgressLessonQuiz(
         @Path("lessonId") lessonId: String,
@@ -161,4 +167,75 @@ interface ApiService {
     suspend fun deleteConversation(
         @Path("conversationId") conversationId: String
     ): MessageResponse
+
+    @POST("flashcards/generate/{documentId}")
+    suspend fun generateFlashcards(
+        @Path("documentId") documentId: String
+    ): List<Flashcard>
+
+    @GET("flashcards")
+    suspend fun getFlashcards(): List<Flashcard>
+
+    @GET("flashcards/review")
+    suspend fun getFlashcardsToReview(): List<Flashcard>
+
+    @PATCH("flashcards/{id}/review")
+    suspend fun updateFlashcardReview(
+        @Path("id") id: String,
+        @Body request: ReviewUpdateRequest
+    ): Flashcard
+
+    @POST("flashcards")
+    suspend fun createFlashcard(
+        @Body request: CreateFlashcardRequest
+    ): Flashcard
+
+    @GET("analytics/stats")
+    suspend fun getStats(): UserStats
+
+    @GET("analytics/overview")
+    suspend fun getAnalyticsOverview(): Response<AnalyticsOverview>
+
+    @GET("study-sessions/daily")
+    suspend fun getDailySession(): Response<StudySession>
+
+    @POST("study-sessions/{id}/submit")
+    suspend fun submitSessionResult(
+        @Path("id") id: String,
+        @Body result: SessionSubmitResult
+    ): Response<GamificationStats>
+
+    @GET("study-sessions/stats")
+    suspend fun getUserStats(): Response<GamificationStats>
+
+    @POST("study-sessions/generate-batch/{documentId}")
+    suspend fun generateBatch(
+        @Path("documentId") documentId: String
+    ): Response<BatchGenResponse>
+
+    @POST("study-sessions/mock-exam")
+    suspend fun generateMockExam(
+        @Body request: MockExamRequest
+    ): Response<StudySession>
+
+    @POST("study-sessions/focus")
+    suspend fun submitFocusSession(
+        @Body request: FocusSubmitRequest
+    ): Response<GamificationStats>
+
+    @GET("study-sessions/leaderboard")
+    suspend fun getLeaderboard(): Response<List<LeaderboardEntry>>
+
+    @GET("analytics/chart")
+    suspend fun getChartData(): List<ChartDataPoint>
+
+    @POST("quizzes/submit")
+    suspend fun submitQuizResult(
+        @Body request: QuizSubmitRequest
+    ): MessageResponse
+
+    @POST("quizzes")
+    suspend fun saveQuiz(
+        @Body request: CreateQuizDto
+    ): QuizSaveResponse
 }

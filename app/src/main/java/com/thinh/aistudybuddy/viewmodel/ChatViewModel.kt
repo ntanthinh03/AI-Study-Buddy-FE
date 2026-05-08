@@ -194,7 +194,7 @@ class ChatViewModel : ViewModel() {
                     if (index != -1) {
                         val updatedConv = _conversations[index]
                         updatedConv.chatMessages.add(ChatMessage(id = UUID.randomUUID().toString(), text = text, isUser = true))
-                        _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages)
+                        _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages.toMutableList())
                         persistChatState()
                         logTurn(turnId, "user_sent_general", activeConversationId)
                         generateAiReply(activeConversationId, text, turnId)
@@ -255,14 +255,12 @@ class ChatViewModel : ViewModel() {
                 persistChatState()
                 logTurn(turnId, "user_sent_pdf", conversationId, "file=$pdfName")
 
-                // Show animated processing message while reading/summarizing
                 val processingMessageId = appendProcessingMessage(conversationId, "Reading document...")
                 persistChatState()
 
                 try {
                     val uploaded = uploadDocument(context, pdfUri, pdfName)
 
-                    // Update processing message to "Summarizing..."
                     replaceMessage(conversationId, processingMessageId, "Summarizing...")
                     persistChatState()
 
@@ -278,49 +276,50 @@ class ChatViewModel : ViewModel() {
                         _conversations[conversationIndex] = updatedConv
                     }
 
-                    // Remove processing message and append actual response
                     val index = _conversations.indexOfFirst { it.id == conversationId }
                     if (index != -1) {
                         val updatedConv = _conversations[index]
                         updatedConv.chatMessages.removeIf { it.id == processingMessageId }
-                        _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages)
+                        _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages.toMutableList())
                     }
                     persistChatState()
 
                     val response = RetrofitClient.instance.sendQuestion(finalizedDocument.id, DocumentChatRequest(text))
-                    appendAiMessage(conversationId, response.answer)
+                    appendAiMessage(
+                        convId = conversationId,
+                        text = response.answer,
+                        showFlashcardButton = true,
+                        documentId = finalizedDocument.id
+                    )
                     clearPendingPdf()
                     persistChatState()
                     logTurn(turnId, "ai_reply_appended", conversationId, "source=documents_chat")
                 } catch (e: HttpException) {
-                    // Remove processing message on error
                     val index = _conversations.indexOfFirst { it.id == conversationId }
                     if (index != -1) {
                         val updatedConv = _conversations[index]
                         updatedConv.chatMessages.removeIf { it.id == processingMessageId }
-                        _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages)
+                        _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages.toMutableList())
                     }
                     uploadTerminalStatus = "FAILED"
                     handleHttpError(e)
                     logTurn(turnId, "turn_http_error", conversationId, "code=${e.code()}")
                 } catch (e: DocumentProcessingTimeoutException) {
-                    // Remove processing message on timeout
                     val index = _conversations.indexOfFirst { it.id == conversationId }
                     if (index != -1) {
                         val updatedConv = _conversations[index]
                         updatedConv.chatMessages.removeIf { it.id == processingMessageId }
-                        _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages)
+                        _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages.toMutableList())
                     }
                     uploadTerminalStatus = "SKIPPED"
                     errorMessage = e.message
                     logTurn(turnId, "turn_timeout", conversationId, "stage=document_pipeline")
                 } catch (e: Exception) {
-                    // Remove processing message on error
                     val index = _conversations.indexOfFirst { it.id == conversationId }
                     if (index != -1) {
                         val updatedConv = _conversations[index]
                         updatedConv.chatMessages.removeIf { it.id == processingMessageId }
-                        _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages)
+                        _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages.toMutableList())
                     }
                     uploadTerminalStatus = "FAILED"
                     errorMessage = e.localizedMessage ?: "Failed to send PDF with message."
@@ -405,7 +404,6 @@ class ChatViewModel : ViewModel() {
             val mimeType = contentResolver.getType(uri) ?: "application/octet-stream"
             val fileName = displayName ?: queryDisplayName(contentResolver, uri) ?: "upload.${guessExtension(mimeType)}"
             
-            // Validate file is an image BEFORE reading bytes
             val isImageFile = mimeType.startsWith("image/") || 
                 fileName.endsWith(".png", ignoreCase = true) ||
                 fileName.endsWith(".jpg", ignoreCase = true) ||
@@ -431,8 +429,6 @@ class ChatViewModel : ViewModel() {
             val documentId = response.documentId
                 ?: throw IllegalStateException("Upload response missing documentId.")
             
-            // Create a minimal Document object from RAG response
-            // The full document will be fetched and updated during waitForUploadPipeline
             Document(
                 id = documentId,
                 fileName = fileName,
@@ -496,6 +492,16 @@ class ChatViewModel : ViewModel() {
                     if (ragState == "FAILED") {
                         errorMessage = "Summary is ready. Knowledge indexing failed, but you can still chat with this file."
                     }
+                    
+                    launch {
+                        try {
+                            RetrofitClient.instance.generateBatch(documentId)
+                            Log.d(TAG, "Batch generation triggered for $documentId")
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to trigger batch generation", e)
+                        }
+                    }
+                    
                     return@withContext latest
                 }
 
@@ -689,13 +695,20 @@ class ChatViewModel : ViewModel() {
                 id = UUID.randomUUID().toString(),
                 text = text,
                 isUser = true,
-                attachmentName = attachmentName
+                attachmentName = attachmentName,
+                createdAt = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
             )
         )
-        _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages)
+        _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages.toMutableList())
     }
 
-    private fun appendAiMessage(convId: String, text: String, messageId: String? = null) {
+    private fun appendAiMessage(
+        convId: String,
+        text: String,
+        messageId: String? = null,
+        showFlashcardButton: Boolean = false,
+        documentId: String? = null
+    ) {
         val index = _conversations.indexOfFirst { it.id == convId }
         if (index == -1) return
         val updatedConv = _conversations[index]
@@ -703,10 +716,13 @@ class ChatViewModel : ViewModel() {
             ChatMessage(
                 id = messageId ?: UUID.randomUUID().toString(),
                 text = text,
-                isUser = false
+                isUser = false,
+                showFlashcardButton = showFlashcardButton,
+                documentId = documentId,
+                createdAt = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
             )
         )
-        _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages)
+        _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages.toMutableList())
     }
 
     private fun appendProcessingMessage(convId: String, text: String): String {
@@ -722,7 +738,7 @@ class ChatViewModel : ViewModel() {
                 isProcessing = true
             )
         )
-        _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages)
+        _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages.toMutableList())
         return messageId
     }
 
@@ -736,7 +752,7 @@ class ChatViewModel : ViewModel() {
                 text = newText,
                 isProcessing = false
             )
-            _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages)
+            _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages.toMutableList())
         }
     }
 
@@ -899,7 +915,7 @@ class ChatViewModel : ViewModel() {
                     showStudyPlanButton = showPlan
                 )
             )
-            _conversations[resolvedIndex] = updatedConv.copy(chatMessages = updatedConv.chatMessages)
+            _conversations[resolvedIndex] = updatedConv.copy(chatMessages = updatedConv.chatMessages.toMutableList())
             persistChatState()
             logTurn(turnId, "ai_reply_appended", resolvedConversationId, "source=chat_ask")
             maybeAutoRenameConversation(
@@ -932,17 +948,22 @@ class ChatViewModel : ViewModel() {
             }
 
             onQuizGenerated?.invoke(quizQuestions)
+            val quizTitle = generatedQuiz.title ?: "Quiz generated from chat"
+            
+            // Create a JSON object for storage that includes the title
+            val storageJson = JsonObject().apply {
+                add("questions", Gson().toJsonTree(quizQuestions))
+                addProperty("quizTitle", quizTitle)
+            }
+
             persistArtifactToBackend(
                 convId = resolvedConversationId,
                 artifactType = "QUIZ",
-                artifact = Gson().toJsonTree(quizQuestions),
-                note = "Quiz generated from chat"
+                artifact = storageJson,
+                note = quizTitle
             )
-            // Rehydrate immediately so UI uses DB-backed quiz artifact state right after generation.
             refreshConversationMessages(resolvedConversationId)
             
-            // Anti-race condition: DB write might be slow, so refresh again after ~700ms
-            // to ensure UI eventually displays the quiz even if first refresh was before DB commit
             viewModelScope.launch {
                 delay(700L)
                 refreshConversationMessages(resolvedConversationId)
@@ -955,14 +976,15 @@ class ChatViewModel : ViewModel() {
                 updatedConv.chatMessages.add(
                     ChatMessage(
                         id = UUID.randomUUID().toString(),
-                        text = "Quiz is ready. Tap Start Quiz to begin.",
+                        text = "Quiz is ready: $quizTitle",
                         isUser = false,
-                        showQuizButton = true
+                        showQuizButton = true,
+                        specificTitle = quizTitle
                     )
                 )
-                _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages)
+                _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages.toMutableList())
                 persistChatState()
-                maybeAutoRenameConversation(resolvedConversationId, userMessage, "Quiz is ready. Tap Start Quiz to begin.")
+                maybeAutoRenameConversation(resolvedConversationId, userMessage, "Quiz is ready: $quizTitle")
             }
         } catch (e: HttpException) {
             handleHttpError(e, forceLogoutOn401 = false)
@@ -984,11 +1006,13 @@ class ChatViewModel : ViewModel() {
             }
 
             onPlanGenerated?.invoke(planJson)
+            val planTitle = parsed.title.ifBlank { "Study plan generated from chat" }
+            
             persistArtifactToBackend(
                 convId = convId,
                 artifactType = "STUDY_PLAN",
                 artifact = JsonParser().parse(planJson),
-                note = "Study plan generated from chat"
+                note = planTitle
             )
             updateConversationKind(convId, ConversationKind.PLAN)
             val courses = extractCoursesFromPlanJson(planJson, parsed)
@@ -998,16 +1022,17 @@ class ChatViewModel : ViewModel() {
                 updatedConv.chatMessages.add(
                     ChatMessage(
                         id = UUID.randomUUID().toString(),
-                        text = "Plan is ready. Tap Check Plan to view course lessons.",
+                        text = "Plan is ready: $planTitle",
                         isUser = false,
                         showStudyPlanButton = true,
                         planJson = planJson,
-                        courses = courses
+                        courses = courses,
+                        specificTitle = planTitle
                     )
                 )
-                _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages)
+                _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages.toMutableList())
                 persistChatState()
-                maybeAutoRenameConversation(convId, userMessage, "Plan is ready. Tap Check Plan to view course lessons.")
+                maybeAutoRenameConversation(convId, userMessage, "Plan is ready: $planTitle")
             }
         } catch (e: HttpException) {
             handleHttpError(e, forceLogoutOn401 = false)
@@ -1020,6 +1045,7 @@ class ChatViewModel : ViewModel() {
 
     private data class QuizGenerationResult(
         val questions: List<QuizQuestion>,
+        val title: String? = null,
         val conversationId: String? = null
     )
 
@@ -1036,13 +1062,14 @@ class ChatViewModel : ViewModel() {
 
         val hiddenPrompt = buildString {
             append("Create a quiz in valid JSON only. ")
-            append("Schema: {\"questions\":[{\"id\":1,\"text\":\"Question\",\"options\":[\"A\",\"B\",\"C\",\"D\"],\"answer\":\"A\",\"explanation\":\"...\"}]}. ")
+            append("Schema: {\"title\":\"A smart title for this quiz based on the topic\",\"questions\":[{\"id\":1,\"text\":\"Question\",\"options\":[\"A\",\"B\",\"C\",\"D\"],\"answer\":\"A\",\"explanation\":\"...\"}]}. ")
             append("Rules: Output English only, no markdown, no code fences, exactly 4 options. ")
             append("User request: ")
             append(userMessage)
         }
         val response = RetrofitClient.instance.aiAsk(AiAskRequest(hiddenPrompt)).answer
-        return QuizGenerationResult(questions = parseStructuredQuiz(response), conversationId = convId)
+        val (questions, title) = parseStructuredQuiz(response)
+        return QuizGenerationResult(questions = questions, title = title, conversationId = convId)
     }
 
     private fun isQuizIntent(message: String): Boolean {
@@ -1081,16 +1108,13 @@ class ChatViewModel : ViewModel() {
     private fun extractCoursesFromPlanJson(_planJson: String, parsed: StudyPlanResponse?): List<ChatMessageCourse> {
          if (parsed == null) return emptyList()
          
-         // Group modules by title prefix (first course name) and count lessons
          val courseGroups = mutableMapOf<String, Int>()
          
          parsed.modules.forEach { module ->
-             // Use the module title as course name, count occurrences
              val courseTitle = module.title
              courseGroups[courseTitle] = (courseGroups[courseTitle] ?: 0) + 1
          }
          
-         // Convert to ChatMessageCourse list
          return courseGroups.map { (title, count) ->
              ChatMessageCourse(
                  id = UUID.randomUUID().toString(),
@@ -1129,19 +1153,21 @@ class ChatViewModel : ViewModel() {
         }
     }
 
-    private fun parseStructuredQuiz(raw: String): List<QuizQuestion> {
+    private fun parseStructuredQuiz(raw: String): Pair<List<QuizQuestion>, String?> {
         val cleaned = raw
             .replace("```json", "")
             .replace("```", "")
             .trim()
-        val root = runCatching { JsonParser().parse(cleaned) }.getOrNull() ?: return emptyList()
+        val root = runCatching { JsonParser().parse(cleaned) }.getOrNull() ?: return Pair(emptyList(), null)
         val questionsArray = when (root) {
             is JsonArray -> root
             is JsonObject -> root.getAsJsonArray("questions")
             else -> null
-        } ?: return emptyList()
+        } ?: return Pair(emptyList(), null)
+        
+        val title = (root as? JsonObject)?.getAsStringOrNull("title")
 
-        return questionsArray.mapIndexedNotNull { idx, element ->
+        val questions = questionsArray.mapIndexedNotNull { idx, element ->
             val obj = element.asJsonObjectOrNull() ?: return@mapIndexedNotNull null
             val text = obj.getAsStringOrNull("text") ?: obj.getAsStringOrNull("question") ?: return@mapIndexedNotNull null
             val options = obj.getAsJsonArray("options")?.mapNotNull { it.asStringOrNull() }?.take(4).orEmpty()
@@ -1157,6 +1183,7 @@ class ChatViewModel : ViewModel() {
                 explanation = explanation
             )
         }
+        return Pair(questions, title)
     }
 
     private fun orderedAnswerIndex(answerRaw: String, options: List<String>): Int {
@@ -1199,7 +1226,6 @@ class ChatViewModel : ViewModel() {
         }
     }
 
-
     fun selectConversation(id: String) {
         val selected = _conversations.find { it.id == id } ?: return
         activeConversationId = id
@@ -1225,7 +1251,6 @@ class ChatViewModel : ViewModel() {
                         else -> ConversationKind.CHAT
                     }
                     
-                    // Load images for messages that have image metadata
                     val messagesWithImages = mappedHistory.map { msg ->
                         if (!msg.imageMimeType.isNullOrBlank() && msg.isUser) {
                             val messageIdFromId = msg.id.removePrefix("hist-user-")
@@ -1316,7 +1341,6 @@ class ChatViewModel : ViewModel() {
                     _currentChatType.value = ChatScreenType.CONTINUING_CHAT
                 }
 
-                // Hydrate currently active conversation from backend so reload shows messages, not only title.
                 if (activeConversationId.isNotBlank()) {
                     refreshConversationMessages(activeConversationId)
                 }
@@ -1711,8 +1735,8 @@ class ChatViewModel : ViewModel() {
                 val specificTitle = runCatching {
                     val json = item.artifactJson?.asJsonObjectOrNull()
                     when (artifactType) {
-                        "QUIZ" -> json?.getAsStringOrNull("quizTitle") ?: json?.getAsStringOrNull("quizName")
-                        "STUDY_PLAN" -> json?.getAsStringOrNull("courseName")
+                        "QUIZ" -> json?.getAsStringOrNull("quizTitle") ?: json?.getAsStringOrNull("quizName") ?: json?.getAsStringOrNull("title")
+                        "STUDY_PLAN" -> json?.getAsStringOrNull("courseName") ?: json?.getAsStringOrNull("title")
                         else -> null
                     }
                 }.getOrNull()
@@ -1727,7 +1751,8 @@ class ChatViewModel : ViewModel() {
                             messageLabel = label,
                             specificTitle = specificTitle,
                             messageType = messageType,
-                            artifactType = artifactType
+                            artifactType = artifactType,
+                            createdAt = item.createdAt
                         )
                     )
                     "STUDY_PLAN" -> messages.add(
@@ -1739,13 +1764,13 @@ class ChatViewModel : ViewModel() {
                             messageLabel = label,
                             specificTitle = specificTitle,
                             messageType = messageType,
-                            artifactType = artifactType
+                            artifactType = artifactType,
+                            createdAt = item.createdAt
                         )
                     )
                 }
                 return@forEach
             }
-
             if (item.question.isNotBlank()) {
                 messages.add(
                     ChatMessage(
@@ -1753,27 +1778,35 @@ class ChatViewModel : ViewModel() {
                         text = item.question,
                         isUser = true,
                         imageMimeType = item.imageMimeType,
-                        imageOriginalName = item.imageOriginalName
+                        imageOriginalName = item.imageOriginalName,
+                        createdAt = item.createdAt
                     )
                 )
             }
             if (item.answer.isNotBlank()) {
                 val answerText = item.answer.trim()
-                if (looksLikeGeneratedQuizAnswer(answerText)) {
+                // Chỉ hiện nút quiz từ văn bản nếu CHƯA có artifact quiz trong cùng một lượt xử lý message này
+                val hasAlreadyAddedQuiz = messages.any { it.showQuizButton && it.id.contains(item.id) }
+                
+                if (looksLikeGeneratedQuizAnswer(answerText) && !hasAlreadyAddedQuiz) {
                     messages.add(
                         ChatMessage(
                             id = "hist-ai-quiz-ready-${item.id}",
                             text = "Quiz is ready. Tap Start Quiz to begin.",
                             isUser = false,
-                            showQuizButton = true
+                            showQuizButton = true,
+                            createdAt = item.createdAt
                         )
                     )
-                } else {
+                } else if (!looksLikeGeneratedQuizAnswer(answerText)) {
                     messages.add(
                         ChatMessage(
                             id = "hist-ai-${item.id}",
                             text = answerText,
-                            isUser = false
+                            isUser = false,
+                            showFlashcardButton = _conversations.find { it.id == activeConversationId }?.documentId != null,
+                            documentId = _conversations.find { it.id == activeConversationId }?.documentId,
+                            createdAt = item.createdAt
                         )
                     )
                 }
@@ -1841,12 +1874,10 @@ class ChatViewModel : ViewModel() {
                         activeConversationId
                     }
 
-                    // Append user message with image info
                     appendUserMessage(conversationForImage, question, "image")
                     persistChatState()
                     logTurn(turnId, "user_sent_image", conversationForImage)
 
-                    // Read image file
                     val contentResolver = context.contentResolver
                     val mimeType = contentResolver.getType(imageUri) ?: "image/jpeg"
                     val fileName = runCatching {
@@ -1859,7 +1890,6 @@ class ChatViewModel : ViewModel() {
                     val bytes = contentResolver.openInputStream(imageUri)?.use { it.readBytes() }
                         ?: throw IllegalArgumentException("Could not read image file.")
 
-                    // Call API with multipart
                     val body = bytes.toRequestBody(mimeType.toMediaTypeOrNull())
                     val imagePart = MultipartBody.Part.createFormData("image", fileName, body)
                     val questionBody = question.toRequestBody("text/plain".toMediaTypeOrNull())
@@ -1873,7 +1903,6 @@ class ChatViewModel : ViewModel() {
 
                     val resolvedConversationId = rebindConversationId(conversationForImage, response.conversationId)
 
-                    // Update conversation if created
                     val convIndex = _conversations.indexOfFirst { it.id == resolvedConversationId }
                     if (convIndex != -1 && _conversations[convIndex].title.isBlank()) {
                         _conversations[convIndex] = _conversations[convIndex].copy(
@@ -1882,7 +1911,6 @@ class ChatViewModel : ViewModel() {
                         )
                     }
 
-                    // Append AI response
                     appendAiMessage(resolvedConversationId, response.answer, response.messageId)
                     persistChatState()
                     logTurn(turnId, "ai_reply_appended", resolvedConversationId, "source=chat_ask_image")
@@ -1964,5 +1992,4 @@ data class ConversationStudyPlanItem(
     val rawJson: String,
     val createdAt: String?
 )
-
 

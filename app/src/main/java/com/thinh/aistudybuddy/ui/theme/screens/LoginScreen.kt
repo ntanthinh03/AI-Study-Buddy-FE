@@ -92,8 +92,6 @@ fun LoginScreen(
         ) {
             BuddyLogo(modifier = Modifier.size(340.dp))
 
-
-
             Text(
                 text = "Welcome Back",
                 color = Color.White,
@@ -155,7 +153,6 @@ fun LoginScreen(
                         val token = RetrofitClient.authToken
                         scope.launch {
                             if (!token.isNullOrBlank()) {
-                                // persist token both to legacy SessionStore and to DataStore
                                 SessionStore.saveSession(context, token, rememberLogin, displayName)
                                 TokenDataStore.saveToken(context, token)
                             } else {

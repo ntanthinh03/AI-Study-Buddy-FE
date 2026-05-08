@@ -8,7 +8,8 @@ data class Document(
     val summary: String?,
     val status: String,
     val summaryStatus: String? = null,
-    val ragStatus: String? = null
+    val ragStatus: String? = null,
+    val createdAt: String? = null
 )
 
 data class DocumentStatusResponse(
@@ -31,4 +32,14 @@ data class SaveDocumentArtifactRequest(
     val artifactType: String,
     val artifact: com.google.gson.JsonElement,
     val note: String? = null
+)
+
+data class MindMapNode(
+    val id: String,
+    val label: String,
+    val parentId: String? = null
+)
+
+data class MindMapResponse(
+    val nodes: List<MindMapNode>
 )

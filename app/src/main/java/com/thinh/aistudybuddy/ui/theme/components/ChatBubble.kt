@@ -7,8 +7,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -32,7 +32,9 @@ import com.thinh.aistudybuddy.data.models.ChatMessage
 fun ChatBubble(
     message: ChatMessage,
     onStartQuiz: () -> Unit,
-    onCheckPlan: (planJson: String?) -> Unit
+    onCheckPlan: (planJson: String?) -> Unit,
+    onGenerateFlashcards: (documentId: String) -> Unit,
+    onSpeakClick: (String) -> Unit = {}
 ) {
     Row(
         modifier = Modifier
@@ -54,7 +56,6 @@ fun ChatBubble(
 
             Column(modifier = Modifier.weight(1f)) {
                 if (message.isProcessing) {
-                    // Animated processing message with dots
                     Row(
                         modifier = Modifier
                             .background(Color(0xFF1E1E1E), RoundedCornerShape(20.dp))
@@ -83,12 +84,18 @@ fun ChatBubble(
                         }
                     }
                 } else {
-                    Text(
-                        text = message.text,
-                        color = Color.White,
-                        fontSize = 16.sp,
-                        lineHeight = 24.sp
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = message.text,
+                            color = Color.White,
+                            fontSize = 16.sp,
+                            lineHeight = 24.sp,
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(onClick = { onSpeakClick(message.text) }) {
+                            Icon(Icons.AutoMirrored.Filled.VolumeUp, null, tint = Color.Gray, modifier = Modifier.size(18.dp))
+                        }
+                    }
                 }
 
                 if (message.showQuizButton) {
@@ -99,6 +106,19 @@ fun ChatBubble(
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Text("Start Quiz", color = Color.Black, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                if (message.showFlashcardButton && !message.documentId.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = { onGenerateFlashcards(message.documentId) },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF64B5F6)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Filled.ViewCarousel, null, tint = Color.White, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Create Flashcards", color = Color.White, fontWeight = FontWeight.Bold)
                     }
                 }
 
@@ -160,7 +180,6 @@ fun ChatBubble(
                     .widthIn(max = 280.dp)
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // Display image if present
                     if (!message.imageBase64.isNullOrBlank() && !message.imageMimeType.isNullOrBlank()) {
                         ImageBubble(imageBase64 = message.imageBase64!!, mimeType = message.imageMimeType!!)
                     }

@@ -19,7 +19,6 @@ object RetrofitClient {
     private const val MAX_PORT = 3020
     private const val CONNECT_TIMEOUT_MS = 500
     private const val API_CONNECT_TIMEOUT_SEC = 10L
-    // Increase timeouts to better support large file uploads and long-running backend tasks
     private const val API_WRITE_TIMEOUT_SEC = 120L
     private const val API_READ_TIMEOUT_SEC = 300L
     private const val API_CALL_TIMEOUT_SEC = 600L
@@ -97,7 +96,6 @@ object RetrofitClient {
     fun updateAuthToken(token: String?) {
         authToken = token?.takeIf { it.isNotBlank() }
         Log.d(TAG, "Auth token set. length=${authToken?.length ?: 0}")
-        // Do not persist here; caller manages persistence. Clear cached service to ensure header changes applied
         cachedService = null
     }
 
@@ -134,6 +132,8 @@ object RetrofitClient {
         val expired = isAuthTokenExpired()
         Log.w(TAG, "Auth diagnostics: reason=$reason tokenLength=$length exp=$exp expired=$expired")
     }
+
+    fun getBaseUrl(): String = resolveBaseUrl()
 
     private fun resolveBaseUrl(): String {
         baseUrlOverride?.let { return it }

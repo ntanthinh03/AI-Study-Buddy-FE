@@ -3,9 +3,6 @@ package com.thinh.aistudybuddy.data.models
 import com.google.gson.JsonElement
 import com.google.gson.annotations.SerializedName
 
-/**
- * UI Models
- */
 enum class ConversationKind {
     CHAT, QUIZ, PLAN
 }
@@ -17,6 +14,8 @@ data class ChatMessage(
     val attachmentName: String? = null,
     val showQuizButton: Boolean = false,
     val showStudyPlanButton: Boolean = false,
+    val showFlashcardButton: Boolean = false,
+    val documentId: String? = null,
     val planJson: String? = null,
     val specificTitle: String? = null,
     val messageLabel: String? = null,
@@ -27,7 +26,8 @@ data class ChatMessage(
     val messageType: String? = null,
     val artifactType: String? = null,
     val artifactJson: JsonElement? = null,
-    val isProcessing: Boolean = false
+    val isProcessing: Boolean = false,
+    val createdAt: String = ""
 )
 
 data class ChatMessageCourse(
@@ -46,9 +46,6 @@ data class Conversation(
     val chatMessages: MutableList<ChatMessage> = mutableListOf()
 )
 
-/**
- * Backend DTOs (used for API communication)
- */
 data class BackendChatMessage(
     val id: String,
     val messageLabel: String? = null,

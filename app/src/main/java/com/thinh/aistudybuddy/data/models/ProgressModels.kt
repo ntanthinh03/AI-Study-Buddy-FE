@@ -4,9 +4,6 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.annotations.SerializedName
 
-/**
- * UI Models for Study Plans
- */
 data class Lesson(
     val id: String,
     val title: String,
@@ -28,12 +25,16 @@ data class StudyPlan(
     val title: String,
     val lessons: List<Lesson>,
     val overview: String = "",
-    val estimatedTotalMinutes: Int = 0
+    val estimatedTotalMinutes: Int = 0,
+    val intensity: StudyIntensity = StudyIntensity.SMART
 )
 
-/**
- * Backend Models for Progress tracking
- */
+enum class StudyIntensity(val label: String, val icon: String, val lessonsPerDay: Int) {
+    CHILL("Chill", "🐢", 1),
+    SMART("Smart", "🦊", 3),
+    HARDCORE("Hardcore", "🐲", 5)
+}
+
 enum class ModuleStatus {
     LOCKED,
     IN_PROGRESS,

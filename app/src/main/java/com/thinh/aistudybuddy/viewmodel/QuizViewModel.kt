@@ -40,6 +40,7 @@ class QuizViewModel : ViewModel() {
     private var currentQuizTitle by mutableStateOf("Quiz Session")
     private var currentDocumentId by mutableStateOf<String?>(null)
     private var currentLessonId by mutableStateOf<String?>(null)
+    private var currentQuizId by mutableStateOf<String?>(null)
 
     val userAnswers = mutableStateListOf<Int>()
     val submittedQuestions = mutableStateListOf<Boolean>()
@@ -160,6 +161,7 @@ class QuizViewModel : ViewModel() {
         currentQuestionIndex = 0
         score = 0
         isNewRecord = false
+        currentQuizId = null
         persistQuizState()
         persistQuizToBackend()
     }
@@ -306,6 +308,17 @@ class QuizViewModel : ViewModel() {
                     }
 
                     !currentDocumentId.isNullOrBlank() -> {
+                        // For chat/document quizzes, we also save to the main quizzes table to get a quizId for analytics
+                        val createDto = CreateQuizDto(
+                            documentId = currentDocumentId!!,
+                            questions = _questions.toList(),
+                            quizName = currentQuizTitle,
+                            quizTitle = currentQuizTitle
+                        )
+                        val saveResponse = RetrofitClient.instance.saveQuiz(createDto)
+                        currentQuizId = saveResponse.quizId
+                        
+                        // Also keep as artifact in chat history
                         RetrofitClient.instance.saveDocumentArtifact(
                             currentDocumentId!!,
                             SaveDocumentArtifactRequest(
@@ -322,6 +335,35 @@ class QuizViewModel : ViewModel() {
                 }
             } catch (_: IOException) {
             } catch (_: Exception) {
+            }
+        }
+    }
+
+    fun submitQuizResultToBackend() {
+        val quizId = currentQuizId ?: return
+        if (RetrofitClient.authToken.isNullOrBlank()) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val totalQuestions = _questions.size
+                val correctAnswers = userAnswers.filterIndexed { index, answer -> 
+                    answer != -1 && answer == _questions[index].correctAnswerIndex 
+                }.size
+                
+                val score = if (totalQuestions > 0) (correctAnswers * 100) / totalQuestions else 0
+
+                val request = QuizSubmitRequest(
+                    quizId = quizId,
+                    score = score,
+                    totalQuestions = totalQuestions,
+                    correctAnswers = correctAnswers,
+                    durationSeconds = 0
+                )
+                
+                RetrofitClient.instance.submitQuizResult(request)
+                Log.d(TAG, "Quiz result submitted successfully for quizId=$quizId")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to submit quiz result: ${e.message}")
             }
         }
     }

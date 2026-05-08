@@ -56,13 +56,11 @@ object AiAskService {
 
         try {
             updateSession(sessionId) { it.copy(state = AskState.UPLOADING) }
-            // Request 1: upload file as protected document (PDF or image)
             val documentId = uploadDocumentForAsk(context, fileUri, fileDisplayName)
             Log.d(TAG, "Document uploaded: documentId=$documentId")
 
             updateSession(sessionId) { it.copy(documentId = documentId, state = AskState.PROCESSING) }
 
-            // Request 2: ask against uploaded document
             val answer = askAgainstDocument(sessionId, documentId, question)
             if (answer.isBlank()) {
                 return@withContext Result.failure(Exception("AI returned an empty response"))
@@ -135,7 +133,6 @@ object AiAskService {
 
         Result.success(session.answer)
     }
-
 
     private suspend fun uploadDocumentForAsk(
         context: Context,

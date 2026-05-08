@@ -2,9 +2,6 @@ package com.thinh.aistudybuddy.data.models
 
 import com.google.gson.annotations.SerializedName
 
-/**
- * UI Model for Quiz Questions used across the app.
- */
 data class QuizQuestion(
     val id: String,
     val question: String,
@@ -14,9 +11,6 @@ data class QuizQuestion(
     val explanation: String = ""
 )
 
-/**
- * Backend Model for Quiz Questions (e.g. from RAG or legacy endpoints).
- */
 data class BackendQuizQuestion(
     val question: String, 
     val options: Map<String, String>, 
@@ -41,4 +35,27 @@ data class Quiz(
     val questions: List<BackendQuizQuestion> = emptyList(),
     val createdAt: String? = null,
     val score: Int? = null
+)
+
+data class CreateQuizDto(
+    val documentId: String,
+    val questions: List<QuizQuestion>,
+    val quizName: String? = null,
+    val quizTitle: String? = null
+)
+
+data class QuizSaveResponse(
+    val quizId: String,
+    val quizName: String,
+    val quizTitle: String,
+    val conversationId: String,
+    val questions: List<QuizQuestion>
+)
+
+data class QuizSubmitRequest(
+    val quizId: String,
+    val score: Int,
+    val totalQuestions: Int,
+    val correctAnswers: Int,
+    val durationSeconds: Int = 0
 )

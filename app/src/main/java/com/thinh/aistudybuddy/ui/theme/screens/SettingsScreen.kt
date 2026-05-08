@@ -1,4 +1,4 @@
-package com.thinh.aistudybuddy.ui.screens
+package com.thinh.aistudybuddy.ui.theme.screens
 
 import android.widget.Toast
 import androidx.compose.foundation.clickable
@@ -75,7 +75,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                         onValueChange = { baseUrl = it },
                         singleLine = true,
                         label = { Text("Base URL", color = Color.Gray) },
-                        placeholder = { Text("http://10.0.2.2:3001/", color = Color.DarkGray) },
+                        placeholder = { Text("http://10.0.2.2:3000", color = Color.DarkGray) },
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedTextColor = Color.White,

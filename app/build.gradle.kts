@@ -90,6 +90,7 @@ dependencies {
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.6.1")
+    implementation("io.socket:socket.io-client:2.1.0")
 }
 
 fun File.makeWritableRecursively() {
@@ -125,19 +126,17 @@ fun forceDeleteDirWithCmd(targetDir: File, maxAttempts: Int = 8) {
     }
 
     if (targetDir.exists()) {
-        throw GradleException(
-            "Could not delete ${targetDir.absolutePath}. Close apps/processes locking the build directory and retry."
+        logger.warn(
+            "Could not delete ${targetDir.absolutePath}; build will continue using the existing directory. " +
+                "Close apps/processes locking the build directory and clean it manually if stale outputs persist."
         )
     }
 }
 
 val prepareFreshModuleBuildDir by tasks.registering {
     doLast {
-        val isWindows = System.getProperty("os.name").contains("windows", ignoreCase = true)
-        if (!isWindows) return@doLast
-
-        // Workaround for Windows file-handle races in merge resources: start each build from a fresh module build dir.
-        forceDeleteDirWithCmd(layout.buildDirectory.asFile.get())
+        // Keep the module build dir stable so IDE/runtime artifact loading does not break on Windows.
+        // Cleanup is intentionally handled by the standard clean task instead of deleting the active build dir here.
     }
 }
 

@@ -51,6 +51,8 @@ class StudyPlanViewModel : ViewModel() {
     var errorMessage by mutableStateOf<String?>(null)
         private set
 
+    private var selectedIntensity by mutableStateOf<StudyIntensity>(StudyIntensity.SMART)
+
     val activePlan: StudyPlan
         get() {
             val base = (studyPlanResponse ?: fallbackPlanResponse).toLegacyPlan(timeline)
@@ -65,8 +67,16 @@ class StudyPlanViewModel : ViewModel() {
                     )
                 }
             }
-            return base.copy(lessons = enrichedLessons)
+            return base.copy(
+                lessons = enrichedLessons,
+                intensity = selectedIntensity
+            )
         }
+
+    fun updateIntensity(intensity: StudyIntensity) {
+        selectedIntensity = intensity
+        persistStudyPlanState()
+    }
 
     init {
         val cached = LocalHistoryStore.loadStudyPlanState()

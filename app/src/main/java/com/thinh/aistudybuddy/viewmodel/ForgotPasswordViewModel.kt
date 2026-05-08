@@ -5,10 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.thinh.aistudybuddy.data.ForgotPasswordSendOtpRequest
-import com.thinh.aistudybuddy.data.ForgotPasswordSendOtpResponse
-import com.thinh.aistudybuddy.data.ForgotPasswordResetPasswordRequest
-import com.thinh.aistudybuddy.data.ForgotPasswordVerifyOtpRequest
+import com.thinh.aistudybuddy.data.models.*
 import com.thinh.aistudybuddy.data.network.RetrofitClient
 import kotlinx.coroutines.launch
 import retrofit2.HttpException

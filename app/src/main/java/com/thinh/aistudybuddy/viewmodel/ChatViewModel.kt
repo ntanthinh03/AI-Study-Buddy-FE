@@ -15,25 +15,11 @@ import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.thinh.aistudybuddy.data.AiAskService
-import com.thinh.aistudybuddy.data.AiAskRequest
-import com.thinh.aistudybuddy.data.AskAiRequest
-import com.thinh.aistudybuddy.data.AskState
-import com.thinh.aistudybuddy.data.ChatMessage as BackendChatMessage
-import com.thinh.aistudybuddy.data.ConversationMessage as BackendConversationMessage
-import com.thinh.aistudybuddy.data.DocumentChatRequest
-import com.thinh.aistudybuddy.data.Document
-import com.thinh.aistudybuddy.data.QuizQuestion as ApiQuizQuestion
-import com.thinh.aistudybuddy.data.SaveDocumentArtifactRequest
-import com.thinh.aistudybuddy.data.local.LocalHistoryStore
+import com.thinh.aistudybuddy.data.models.*
+import com.thinh.aistudybuddy.data.models.BackendQuizQuestion as ApiQuizQuestion
+
+import com.thinh.aistudybuddy.data.local.*
 import com.thinh.aistudybuddy.data.network.RetrofitClient
-import com.thinh.aistudybuddy.data.model.Banner
-import com.thinh.aistudybuddy.data.model.ChatMessage
-import com.thinh.aistudybuddy.data.model.ChatMessageCourse
-import com.thinh.aistudybuddy.data.model.Conversation
-import com.thinh.aistudybuddy.data.model.ConversationKind
-import com.thinh.aistudybuddy.data.model.QuizQuestion
-import com.thinh.aistudybuddy.data.model.Suggestion
-import com.thinh.aistudybuddy.data.model.StudyPlanJsonParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -86,6 +72,7 @@ class ChatViewModel : ViewModel() {
         private set
 
     private var currentAskSessionId by mutableStateOf<String?>(null)
+    private var currentAskDocumentId by mutableStateOf<String?>(null)
     var aiAskState by mutableStateOf<AskState>(AskState.IDLE)
         private set
 
@@ -441,7 +428,8 @@ class ChatViewModel : ViewModel() {
                 throw Exception("Server rejected image upload: ${response.status}")
             }
             
-            val documentId = response.documentId ?: UUID.randomUUID().toString()
+            val documentId = response.documentId
+                ?: throw IllegalStateException("Upload response missing documentId.")
             
             // Create a minimal Document object from RAG response
             // The full document will be fetched and updated during waitForUploadPipeline
@@ -591,11 +579,7 @@ class ChatViewModel : ViewModel() {
                 logTurn(turnId, "persist_document_intent_quiz", convId)
                 val persisted = persistIntentTurnForDocument(documentId, text)
                 if (persisted == null) return
-                if (persisted.answer.isNotBlank()) {
-                    appendAiMessage(convId, persisted.answer)
-                    persistChatState()
-                    logTurn(turnId, "ai_reply_appended", convId, "source=documents_chat")
-                }
+                logTurn(turnId, "ai_reply_hidden_for_quiz", convId, "source=documents_chat")
                 handleQuizIntent(convId, text)
                 return
             }
@@ -630,7 +614,7 @@ class ChatViewModel : ViewModel() {
         }
     }
 
-    private suspend fun persistIntentTurnForDocument(documentId: String, userMessage: String): com.thinh.aistudybuddy.data.ChatResponse? {
+    private suspend fun persistIntentTurnForDocument(documentId: String, userMessage: String): ChatResponse? {
         return try {
             RetrofitClient.instance.sendQuestion(documentId, DocumentChatRequest(userMessage))
         } catch (e: HttpException) {
@@ -642,7 +626,7 @@ class ChatViewModel : ViewModel() {
         }
     }
 
-    private suspend fun persistIntentTurnForGeneralChat(convId: String, userMessage: String): com.thinh.aistudybuddy.data.ChatAskResponse? {
+    private suspend fun persistIntentTurnForGeneralChat(convId: String, userMessage: String): ChatAskResponse? {
         return try {
             val currentConversation = _conversations.firstOrNull { it.id == convId }
             val requestTitle = currentConversation
@@ -854,11 +838,7 @@ class ChatViewModel : ViewModel() {
                 return
             }
             val persistedConvId = rebindConversationId(convId, persisted.conversationId)
-            if (persisted.answer.isNotBlank()) {
-                appendAiMessage(persistedConvId, persisted.answer, persisted.messageId)
-                persistChatState()
-                logTurn(turnId, "ai_reply_appended", persistedConvId, "source=chat_ask")
-            }
+            logTurn(turnId, "ai_reply_hidden_for_quiz", persistedConvId, "source=chat_ask")
             handleQuizIntent(persistedConvId, userMessage)
             isTyping = false
             return
@@ -958,6 +938,16 @@ class ChatViewModel : ViewModel() {
                 artifact = Gson().toJsonTree(quizQuestions),
                 note = "Quiz generated from chat"
             )
+            // Rehydrate immediately so UI uses DB-backed quiz artifact state right after generation.
+            refreshConversationMessages(resolvedConversationId)
+            
+            // Anti-race condition: DB write might be slow, so refresh again after ~700ms
+            // to ensure UI eventually displays the quiz even if first refresh was before DB commit
+            viewModelScope.launch {
+                delay(700L)
+                refreshConversationMessages(resolvedConversationId)
+            }
+            
             updateConversationKind(resolvedConversationId, ConversationKind.QUIZ)
             val index = _conversations.indexOfFirst { it.id == resolvedConversationId }
             if (index != -1) {
@@ -1088,7 +1078,7 @@ class ChatViewModel : ViewModel() {
              .trim()
      }
 
-    private fun extractCoursesFromPlanJson(_planJson: String, parsed: com.thinh.aistudybuddy.data.model.StudyPlanResponse?): List<ChatMessageCourse> {
+    private fun extractCoursesFromPlanJson(_planJson: String, parsed: StudyPlanResponse?): List<ChatMessageCourse> {
          if (parsed == null) return emptyList()
          
          // Group modules by title prefix (first course name) and count lessons
@@ -1424,7 +1414,7 @@ class ChatViewModel : ViewModel() {
         if (error.code() == 401) {
             RetrofitClient.logAuthTokenDiagnostics("Received 401 in ChatViewModel")
             if (forceLogoutOn401) {
-                RetrofitClient.authToken = null
+                RetrofitClient.updateAuthToken(null)
                 errorMessage = "Session expired. Please log in again."
                 sessionExpired = true
             } else {
@@ -1479,6 +1469,12 @@ class ChatViewModel : ViewModel() {
             errorMessage = "Please enter a question"
             return
         }
+        if (!RetrofitClient.hasUsableAuthToken()) {
+            RetrofitClient.logAuthTokenDiagnostics("Blocked uploadThenAsk: token missing or expired")
+            errorMessage = "Missing or expired token. Please log in again."
+            sessionExpired = true
+            return
+        }
 
         viewModelScope.launch {
             isUploading = true
@@ -1493,26 +1489,52 @@ class ChatViewModel : ViewModel() {
             persistChatState()
 
             try {
+                aiAskState = AskState.PROCESSING
+                uploadStatusLabel = "Uploading and asking"
+
                 val result = AiAskService.uploadThenAsk(context, fileUri, question, fileName)
                 result.onSuccess { sessionId ->
                     currentAskSessionId = sessionId
-                    aiAskState = AskState.COMPLETED
-                    uploadTerminalStatus = "COMPLETED"
-
-                    val answerResult = AiAskService.getSessionAnswer(sessionId)
-                    answerResult.onSuccess { answer ->
-                        appendAiMessage(convId, answer)
-                        persistChatState()
-                        maybeAutoRenameConversation(convId, question, answer)
-                    }.onFailure { error ->
-                        errorMessage = error.localizedMessage ?: "Failed to retrieve answer"
-                        aiAskState = AskState.ERROR
+                    val session = AiAskService.getSession(sessionId)
+                    val documentId = session?.documentId
+                        ?: throw IllegalStateException("Upload succeeded but missing document id.")
+                    val answer = session.answer.trim()
+                    if (answer.isBlank()) {
+                        throw IllegalStateException("AI returned an empty response")
                     }
+
+                    currentAskDocumentId = documentId
+                    activeDocumentId = documentId
+                    val convIndex = _conversations.indexOfFirst { it.id == convId }
+                    if (convIndex != -1) {
+                        _conversations[convIndex] = _conversations[convIndex].copy(documentId = documentId)
+                    }
+
+                    appendAiMessage(convId, answer)
+                    maybeAutoRenameConversation(convId, question, answer)
+
+                    val backendConvId = runCatching {
+                        RetrofitClient.instance.getConversations()
+                            .firstOrNull { it.documentId == documentId }
+                            ?.id
+                    }.getOrNull()
+                    val resolvedConvId = when {
+                        backendConvId.isNullOrBlank() -> convId
+                        backendConvId == convId -> convId
+                        else -> rebindConversationId(convId, backendConvId)
+                    }
+                    refreshConversationMessages(resolvedConvId)
                 }.onFailure { error ->
-                    uploadTerminalStatus = "FAILED"
-                    errorMessage = error.localizedMessage ?: "Upload and ask failed"
-                    aiAskState = AskState.ERROR
+                    throw error
                 }
+
+                aiAskState = AskState.COMPLETED
+                uploadTerminalStatus = "COMPLETED"
+                persistChatState()
+            } catch (e: HttpException) {
+                uploadTerminalStatus = "FAILED"
+                handleHttpError(e)
+                aiAskState = AskState.ERROR
             } catch (e: Exception) {
                 uploadTerminalStatus = "FAILED"
                 errorMessage = e.localizedMessage ?: "Failed to process request"
@@ -1528,7 +1550,13 @@ class ChatViewModel : ViewModel() {
     fun retryAsk(newQuestion: String? = null) {
         val sessionId = currentAskSessionId
         if (sessionId.isNullOrBlank()) {
-            errorMessage = "No active session to retry"
+            errorMessage = "No upload session available to retry"
+            return
+        }
+        if (!RetrofitClient.hasUsableAuthToken()) {
+            RetrofitClient.logAuthTokenDiagnostics("Blocked retryAsk: token missing or expired")
+            errorMessage = "Missing or expired token. Please log in again."
+            sessionExpired = true
             return
         }
 
@@ -1536,34 +1564,60 @@ class ChatViewModel : ViewModel() {
             isTyping = true
             aiAskState = AskState.PROCESSING
             errorMessage = null
-            val titleSourceQuestion = newQuestion?.takeIf { it.isNotBlank() }
-                ?: activeMessages.lastOrNull { it.isUser }?.text.orEmpty()
+            val retryQuestion = newQuestion?.takeIf { it.isNotBlank() }
+                ?: activeMessages.lastOrNull { it.isUser }?.text
+            if (retryQuestion.isNullOrBlank()) {
+                errorMessage = "Please enter a question"
+                aiAskState = AskState.ERROR
+                isTyping = false
+                return@launch
+            }
 
             val convId = activeConversationId.takeIf { it.isNotBlank() }
                 ?: ensureConversationForDirectAsk()
 
-            if (newQuestion != null && newQuestion.isNotBlank()) {
+            if (!newQuestion.isNullOrBlank()) {
                 appendUserMessage(convId, newQuestion)
             }
             persistChatState()
 
             try {
-                val result = AiAskService.retryAsk(sessionId, newQuestion)
+                val result = AiAskService.retryAsk(sessionId, retryQuestion)
                 result.onSuccess {
-                    aiAskState = AskState.COMPLETED
-                    val answerResult = AiAskService.getSessionAnswer(sessionId)
-                    answerResult.onSuccess { answer ->
-                        appendAiMessage(convId, answer)
-                        persistChatState()
-                        maybeAutoRenameConversation(convId, titleSourceQuestion, answer)
-                    }.onFailure { error ->
-                        errorMessage = error.localizedMessage
-                        aiAskState = AskState.ERROR
+                    val session = AiAskService.getSession(sessionId)
+                        ?: throw IllegalStateException("Session not found")
+                    val documentId = session.documentId
+                        ?: throw IllegalStateException("Retry session missing document id")
+                    val answer = session.answer.trim()
+                    if (answer.isBlank()) {
+                        throw IllegalStateException("AI returned an empty response")
                     }
+
+                    currentAskDocumentId = documentId
+                    activeDocumentId = documentId
+                    appendAiMessage(convId, answer)
+                    maybeAutoRenameConversation(convId, retryQuestion, answer)
+
+                    val backendConvId = runCatching {
+                        RetrofitClient.instance.getConversations()
+                            .firstOrNull { it.documentId == documentId }
+                            ?.id
+                    }.getOrNull()
+                    val resolvedConvId = when {
+                        backendConvId.isNullOrBlank() -> convId
+                        backendConvId == convId -> convId
+                        else -> rebindConversationId(convId, backendConvId)
+                    }
+                    refreshConversationMessages(resolvedConvId)
                 }.onFailure { error ->
-                    errorMessage = error.localizedMessage ?: "Retry failed"
-                    aiAskState = AskState.ERROR
+                    throw error
                 }
+
+                aiAskState = AskState.COMPLETED
+                persistChatState()
+            } catch (e: HttpException) {
+                handleHttpError(e)
+                aiAskState = AskState.ERROR
             } catch (e: Exception) {
                 errorMessage = e.localizedMessage ?: "Retry failed"
                 aiAskState = AskState.ERROR
@@ -1629,6 +1683,7 @@ class ChatViewModel : ViewModel() {
     fun clearAskSession() {
         currentAskSessionId?.let { AiAskService.clearSession(it) }
         currentAskSessionId = null
+        currentAskDocumentId = null
         aiAskState = AskState.IDLE
     }
 
@@ -1652,21 +1707,39 @@ class ChatViewModel : ViewModel() {
             val artifactType = item.artifactType.orEmpty().trim().uppercase()
 
             if (messageType == "ARTIFACT") {
+                val label = item.messageLabel
+                val specificTitle = runCatching {
+                    val json = item.artifactJson?.asJsonObjectOrNull()
+                    when (artifactType) {
+                        "QUIZ" -> json?.getAsStringOrNull("quizTitle") ?: json?.getAsStringOrNull("quizName")
+                        "STUDY_PLAN" -> json?.getAsStringOrNull("courseName")
+                        else -> null
+                    }
+                }.getOrNull()
+
                 when (artifactType) {
                     "QUIZ" -> messages.add(
                         ChatMessage(
                             id = "hist-artifact-quiz-${item.id}",
-                            text = "Quiz is ready. Tap Start Quiz to begin.",
+                            text = label ?: "Quiz is ready. Tap Start Quiz to begin.",
                             isUser = false,
-                            showQuizButton = true
+                            showQuizButton = true,
+                            messageLabel = label,
+                            specificTitle = specificTitle,
+                            messageType = messageType,
+                            artifactType = artifactType
                         )
                     )
                     "STUDY_PLAN" -> messages.add(
                         ChatMessage(
                             id = "hist-artifact-plan-${item.id}",
-                            text = "Plan is ready. Tap Check Plan to view course lessons.",
+                            text = label ?: "Plan is ready. Tap Check Plan to view course lessons.",
                             isUser = false,
-                            showStudyPlanButton = true
+                            showStudyPlanButton = true,
+                            messageLabel = label,
+                            specificTitle = specificTitle,
+                            messageType = messageType,
+                            artifactType = artifactType
                         )
                     )
                 }
@@ -1685,22 +1758,44 @@ class ChatViewModel : ViewModel() {
                 )
             }
             if (item.answer.isNotBlank()) {
-                messages.add(
-                    ChatMessage(
-                        id = "hist-ai-${item.id}",
-                        text = item.answer,
-                        isUser = false
+                val answerText = item.answer.trim()
+                if (looksLikeGeneratedQuizAnswer(answerText)) {
+                    messages.add(
+                        ChatMessage(
+                            id = "hist-ai-quiz-ready-${item.id}",
+                            text = "Quiz is ready. Tap Start Quiz to begin.",
+                            isUser = false,
+                            showQuizButton = true
+                        )
                     )
-                )
+                } else {
+                    messages.add(
+                        ChatMessage(
+                            id = "hist-ai-${item.id}",
+                            text = answerText,
+                            isUser = false
+                        )
+                    )
+                }
             }
         }
         return messages
     }
 
-    private fun List<BackendConversationMessage>.toBackendHistory(): List<BackendChatMessage> {
+    private fun looksLikeGeneratedQuizAnswer(answer: String): Boolean {
+        val normalized = answer.lowercase()
+        if (normalized.contains("answer key")) return true
+        val numberedQuestions = Regex("""(?m)^\s*\d+\.\s*\*\*.*\?\*\*""")
+        if (numberedQuestions.findAll(answer).count() >= 2) return true
+        val optionLines = Regex("""(?m)^\s*[a-dA-D]\)\s+.+""")
+        return optionLines.findAll(answer).count() >= 4
+    }
+
+    private fun List<ConversationMessage>.toBackendHistory(): List<BackendChatMessage> {
         return map { item ->
             BackendChatMessage(
                 id = item.id,
+                messageLabel = item.messageLabel,
                 question = item.question.orEmpty(),
                 answer = item.answer.orEmpty(),
                 createdAt = item.createdAt.orEmpty(),

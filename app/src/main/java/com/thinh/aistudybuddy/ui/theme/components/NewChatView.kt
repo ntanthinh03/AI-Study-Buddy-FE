@@ -15,8 +15,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.thinh.aistudybuddy.data.model.Banner
-import com.thinh.aistudybuddy.data.model.Suggestion
+import com.thinh.aistudybuddy.data.models.Banner
+import com.thinh.aistudybuddy.data.models.Suggestion
 
 @Composable
 fun NewChatView(

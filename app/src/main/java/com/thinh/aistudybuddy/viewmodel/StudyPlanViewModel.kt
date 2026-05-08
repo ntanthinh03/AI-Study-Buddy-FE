@@ -13,24 +13,9 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
-import com.thinh.aistudybuddy.data.AiAskRequest
-import com.thinh.aistudybuddy.data.ProgressLesson
-import com.thinh.aistudybuddy.data.ProgressLessonRequest
-import com.thinh.aistudybuddy.data.ProgressLessonStatusRequest
-import com.thinh.aistudybuddy.data.SaveLessonQuizRequest
-import com.thinh.aistudybuddy.data.local.CachedLessonEnrichment
-import com.thinh.aistudybuddy.data.local.LocalHistoryStore
-import com.thinh.aistudybuddy.data.model.DEFAULT_STUDY_PLAN_JSON
-import com.thinh.aistudybuddy.data.model.ModuleStatus
-import com.thinh.aistudybuddy.data.model.ProgressCompleteRequest
-import com.thinh.aistudybuddy.data.model.ProgressInitRequest
-import com.thinh.aistudybuddy.data.model.QuizQuestion
-import com.thinh.aistudybuddy.data.model.StudyModule
-import com.thinh.aistudybuddy.data.model.StudyPlan
-import com.thinh.aistudybuddy.data.model.StudyPlanJsonParser
-import com.thinh.aistudybuddy.data.model.StudyPlanResponse
-import com.thinh.aistudybuddy.data.model.StudyProgressItem
-import com.thinh.aistudybuddy.data.model.toLegacyPlan
+import com.thinh.aistudybuddy.data.models.*
+import com.thinh.aistudybuddy.data.local.*
+
 import com.thinh.aistudybuddy.data.network.RetrofitClient
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
@@ -262,7 +247,7 @@ class StudyPlanViewModel : ViewModel() {
         return backendLessonIdByModuleId[moduleId]
     }
 
-    fun setLessonConversationId(conversationId: String?) {
+    fun updateLessonConversationId(conversationId: String?) {
         lessonConversationId = conversationId?.trim()?.takeIf { it.isNotBlank() }
     }
 
@@ -364,7 +349,7 @@ class StudyPlanViewModel : ViewModel() {
             pendingEnrichmentSyncModuleIds = pendingEnrichmentSyncModuleIds - module.moduleId
         } catch (error: HttpException) {
             if (error.code() == 401) {
-                RetrofitClient.authToken = null
+                RetrofitClient.updateAuthToken(null)
             }
             pendingEnrichmentSyncModuleIds = pendingEnrichmentSyncModuleIds + module.moduleId
         } catch (_: IOException) {
@@ -395,6 +380,7 @@ class StudyPlanViewModel : ViewModel() {
         val created = RetrofitClient.instance.createProgressLesson(
             ProgressLessonRequest(
                 conversationId = conversationId,
+                courseName = studyPlanResponse?.title,
                 title = module.title,
                 contentText = theory,
                 documentId = module.documentId,
@@ -404,18 +390,17 @@ class StudyPlanViewModel : ViewModel() {
         return created.id
     }
 
-    private fun matchModuleForProgressLesson(
-        progressLesson: ProgressLesson,
-        modules: List<StudyModule>
-    ): StudyModule? {
-        val byDocument = progressLesson.documentId
-            ?.takeIf { it.isNotBlank() }
-            ?.let { docId -> modules.firstOrNull { it.documentId == docId } }
-        if (byDocument != null) return byDocument
+    private fun matchModuleForProgressLesson(backend: ProgressLesson, modules: List<StudyModule>): StudyModule? {
+        val titleMatch = modules.find { 
+            normalizeText(it.title) == normalizeText(backend.lessonTitle ?: backend.title) 
+        }
+        if (titleMatch != null) return titleMatch
 
-        val normalizedTitle = normalizeText(progressLesson.title)
-        if (normalizedTitle.isBlank()) return null
-        return modules.firstOrNull { normalizeText(it.title) == normalizedTitle }
+        if (!backend.documentId.isNullOrBlank()) {
+            val docMatch = modules.find { it.documentId == backend.documentId }
+            if (docMatch != null) return docMatch
+        }
+        return null
     }
 
     private fun progressLessonToEnrichment(progressLesson: ProgressLesson, module: StudyModule): LessonEnrichment? {
@@ -710,7 +695,7 @@ class StudyPlanViewModel : ViewModel() {
 
     private fun handleHttpError(error: HttpException) {
         if (error.code() == 401) {
-            RetrofitClient.authToken = null
+            RetrofitClient.updateAuthToken(null)
             initializedDocuments = emptySet()
             errorMessage = "Session expired. Please log in again."
         } else {

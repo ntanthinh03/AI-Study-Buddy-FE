@@ -5,11 +5,7 @@ package com.thinh.aistudybuddy.data.local
 import android.content.Context
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
-import com.thinh.aistudybuddy.data.model.ChatMessage
-import com.thinh.aistudybuddy.data.model.Conversation
-import com.thinh.aistudybuddy.data.model.ConversationKind
-import com.thinh.aistudybuddy.data.model.QuizQuestion
-import com.thinh.aistudybuddy.data.model.StudyProgressItem
+import com.thinh.aistudybuddy.data.models.*
 import java.io.File
 
 private const val HISTORY_FILE_NAME = "study_buddy_history.json"

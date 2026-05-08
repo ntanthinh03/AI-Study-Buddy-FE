@@ -28,6 +28,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import com.thinh.aistudybuddy.ui.components.*
+import com.thinh.aistudybuddy.data.models.*
 import com.thinh.aistudybuddy.viewmodel.ChatScreenType
 import com.thinh.aistudybuddy.viewmodel.ChatViewModel
 import com.thinh.aistudybuddy.viewmodel.QuizViewModel

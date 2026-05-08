@@ -5,7 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.thinh.aistudybuddy.data.RegisterRequest
+import com.thinh.aistudybuddy.data.models.*
 import com.thinh.aistudybuddy.data.network.RetrofitClient
 import kotlinx.coroutines.launch
 import org.json.JSONArray

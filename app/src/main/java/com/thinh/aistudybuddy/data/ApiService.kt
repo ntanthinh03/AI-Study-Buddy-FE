@@ -2,10 +2,7 @@
 
 package com.thinh.aistudybuddy.data
 
-import com.thinh.aistudybuddy.data.model.ProgressCompleteRequest
-import com.thinh.aistudybuddy.data.model.ProgressInitRequest
-import com.thinh.aistudybuddy.data.model.StudyProgressItem
-import com.thinh.aistudybuddy.data.StudyPlanApiResponse
+import com.thinh.aistudybuddy.data.models.*
 import okhttp3.MultipartBody
 import okhttp3.ResponseBody
 import retrofit2.http.*
@@ -76,7 +73,7 @@ interface ApiService {
     @GET("documents/{id}/history")
     suspend fun getChatHistory(
         @Path("id") docId: String
-    ): List<ChatMessage>
+    ): List<BackendChatMessage>
 
     @POST("documents/{id}/history/artifact")
     suspend fun saveDocumentArtifact(

@@ -26,7 +26,7 @@ import androidx.compose.ui.unit.sp
 import android.graphics.BitmapFactory
 import android.util.Base64
 import com.thinh.aistudybuddy.R
-import com.thinh.aistudybuddy.data.model.ChatMessage
+import com.thinh.aistudybuddy.data.models.ChatMessage
 
 @Composable
 fun ChatBubble(

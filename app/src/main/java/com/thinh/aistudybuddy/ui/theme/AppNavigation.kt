@@ -12,6 +12,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import com.thinh.aistudybuddy.data.local.LocalHistoryStore
 import com.thinh.aistudybuddy.data.local.SessionStore
+import com.thinh.aistudybuddy.data.local.TokenDataStore
 import com.thinh.aistudybuddy.data.network.RetrofitClient
 import com.thinh.aistudybuddy.ui.screens.*
 import com.thinh.aistudybuddy.ui.theme.screens.ChangePasswordScreen
@@ -23,6 +24,12 @@ import com.thinh.aistudybuddy.ui.theme.screens.RegisterScreen
 import com.thinh.aistudybuddy.viewmodel.ChatViewModel
 import com.thinh.aistudybuddy.viewmodel.QuizViewModel
 import com.thinh.aistudybuddy.viewmodel.StudyPlanViewModel
+import com.thinh.aistudybuddy.data.models.*
+import com.google.gson.Gson
+import com.google.gson.JsonArray
+import com.google.gson.JsonElement
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import kotlinx.coroutines.launch
 
 @Composable
@@ -36,8 +43,9 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
     val navScope = rememberCoroutineScope()
     val forceLogin = {
         chatViewModel.resetForAccountSwitch()
-        RetrofitClient.authToken = null
+        RetrofitClient.updateAuthToken(null)
         SessionStore.clearSession(navController.context)
+        TokenDataStore.clearToken(navController.context)
         LocalHistoryStore.clearAll()
         inboxBootstrapped = false
         displayName = ""
@@ -163,7 +171,7 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
                             chatViewModel.activeConversationId
                         }
                         if (conversationId.isNullOrBlank()) return@launch
-                        studyViewModel.setLessonConversationId(conversationId)
+                        studyViewModel.updateLessonConversationId(conversationId)
                         navController.navigate("study_plan")
                     }
                 },
@@ -184,7 +192,7 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
                             chatViewModel.activeConversationId
                         }
                         if (conversationId.isNullOrBlank()) return@launch
-                        studyViewModel.setLessonConversationId(conversationId)
+                        studyViewModel.updateLessonConversationId(conversationId)
                         studyViewModel.ensureLessonEnriched(lesson.id)
                         studyViewModel.markModuleStarted(lesson.documentId)
                         navController.navigate("lesson_learn")
@@ -235,7 +243,7 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
                     navController.popBackStack()
                 },
                 onOpenLesson = { planRawJson, lessonId ->
-                    studyViewModel.setLessonConversationId(conversationId)
+                    studyViewModel.updateLessonConversationId(conversationId)
                     studyViewModel.loadStudyPlanFromJson(planRawJson)
                     selectedLessonId = lessonId
                     studyViewModel.ensureLessonEnriched(lessonId)
@@ -249,6 +257,30 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
                 onRefresh = { conversationId ->
                     chatViewModel.refreshConversationMessages(conversationId)
                     studyViewModel.refreshProgressTimeline()
+                },
+                onStartQuiz = { message ->
+                    val quizJson = message.planJson
+                    if (!quizJson.isNullOrBlank()) {
+                        // Attempt to parse quiz questions from the message's planJson
+                        val questions = parseQuizFromJson(quizJson)
+                        if (questions.isNotEmpty()) {
+                            quizViewModel.loadQuestions(
+                                newQuestions = questions,
+                                title = "Quiz: ${message.attachmentName ?: "History"}"
+                            )
+                            navController.navigate("quiz")
+                        }
+                    } else if (message.showQuizButton) {
+                        // Fallback if planJson is missing but it's a quiz message
+                        navController.navigate("quiz")
+                    }
+                },
+                onCheckPlan = { planJson ->
+                    if (!planJson.isNullOrBlank()) {
+                        studyViewModel.loadStudyPlanFromJson(planJson)
+                        studyViewModel.refreshProgressTimeline()
+                        navController.navigate("study_plan")
+                    }
                 },
                 chatViewModel = chatViewModel
             )
@@ -268,5 +300,51 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
                 onSessionExpired = forceLogin
             )
         }
+    }
+}
+
+private fun parseQuizFromJson(json: String): List<QuizQuestion> {
+    return try {
+        val gson = Gson()
+        val rootMap = gson.fromJson(json, Map::class.java)
+        val questionsList = (rootMap["questions"] ?: rootMap["quiz"]) as? List<Map<String, Any>> ?: (if (json.trim().startsWith("[")) gson.fromJson(json, List::class.java) as? List<Map<String, Any>> else null) ?: return emptyList()
+
+        val parsedQuestions = mutableListOf<QuizQuestion>()
+        for (idx in questionsList.indices) {
+            val item = questionsList[idx]
+            
+            val questionText = (item["text"] ?: item["question"])?.toString() ?: continue
+            
+            val optionsRaw = item["options"] as? List<*>
+            val optionsList = optionsRaw?.mapNotNull { it?.toString() }.orEmpty()
+            if (optionsList.size != 4) continue
+            
+            val answerRaw = item["answer"]?.toString() ?: "A"
+            val answerIndex = when (answerRaw.trim().uppercase()) {
+                "A" -> 0
+                "B" -> 1
+                "C" -> 2
+                "D" -> 3
+                else -> {
+                    val found = optionsList.indexOfFirst { it.equals(answerRaw, ignoreCase = true) }
+                    if (found >= 0) found else 0
+                }
+            }
+
+            parsedQuestions.add(
+                QuizQuestion(
+                    id = item["id"]?.toString() ?: "hist-$idx",
+                    question = questionText,
+                    options = optionsList,
+                    correctAnswerIndex = answerIndex,
+                    hint = item["hint"]?.toString() ?: "Choose the best answer.",
+                    explanation = item["explanation"]?.toString() ?: ""
+                )
+            )
+        }
+        parsedQuestions
+    } catch (e: Exception) {
+        android.util.Log.e("AppNavigation", "Failed to parse quiz JSON", e)
+        emptyList()
     }
 }

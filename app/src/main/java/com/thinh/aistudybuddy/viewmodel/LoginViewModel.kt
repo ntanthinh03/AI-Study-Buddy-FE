@@ -5,7 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.thinh.aistudybuddy.data.LoginRequest
+import com.thinh.aistudybuddy.data.models.*
 import com.thinh.aistudybuddy.data.network.RetrofitClient
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
@@ -30,17 +30,17 @@ class LoginViewModel : ViewModel() {
                 val response = RetrofitClient.instance.login(request)
 
                 if (response.token.isBlank()) {
-                    RetrofitClient.authToken = null
+                    RetrofitClient.updateAuthToken(null)
                     RetrofitClient.logAuthTokenDiagnostics("Login success response but token is blank")
                     errorMessage = "Login failed: missing access token in response."
                     return@launch
                 }
 
-                RetrofitClient.authToken = response.token
+                RetrofitClient.updateAuthToken(response.token)
 
                 onSuccess(response.user.fullName.ifBlank { response.user.email })
             } catch (e: Exception) {
-                RetrofitClient.authToken = null
+                RetrofitClient.updateAuthToken(null)
                 errorMessage = when (e) {
                     is HttpException -> {
                         when (e.code()) {

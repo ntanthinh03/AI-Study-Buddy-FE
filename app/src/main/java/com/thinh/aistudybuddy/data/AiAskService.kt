@@ -5,6 +5,7 @@ import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.util.Log
+import com.thinh.aistudybuddy.data.models.*
 import com.thinh.aistudybuddy.data.network.RetrofitClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -12,15 +13,16 @@ import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import retrofit2.HttpException
 import java.util.UUID
 
 @Suppress("unused")
 object AiAskService {
     private const val TAG = "AiAskService"
-    private const val MAX_POLL_RETRIES = 60
-    private const val POLL_INTERVAL_MS = 1000L
     private const val UPLOAD_RETRY_ATTEMPTS = 3
     private const val UPLOAD_RETRY_DELAY_MS = 500L
+    private const val CHAT_READY_RETRY_ATTEMPTS = 4
+    private const val CHAT_READY_RETRY_DELAY_MS = 1200L
 
     private val sessions = mutableMapOf<String, AiAskSession>()
 
@@ -54,12 +56,13 @@ object AiAskService {
 
         try {
             updateSession(sessionId) { it.copy(state = AskState.UPLOADING) }
-            val documentId = uploadRagDocument(context, fileUri, fileDisplayName)
+            // Request 1: upload file as protected document (PDF or image)
+            val documentId = uploadDocumentForAsk(context, fileUri, fileDisplayName)
             Log.d(TAG, "Document uploaded: documentId=$documentId")
 
             updateSession(sessionId) { it.copy(documentId = documentId, state = AskState.PROCESSING) }
-            pollDocumentStatus(sessionId, documentId)
 
+            // Request 2: ask against uploaded document
             val answer = askAgainstDocument(sessionId, documentId, question)
             if (answer.isBlank()) {
                 return@withContext Result.failure(Exception("AI returned an empty response"))
@@ -99,8 +102,6 @@ object AiAskService {
                 )
             }
 
-            pollDocumentStatus(sessionId, documentId)
-
             val answer = askAgainstDocument(sessionId, documentId, question)
             if (answer.isBlank()) {
                 return@withContext Result.failure(Exception("AI returned an empty response"))
@@ -136,7 +137,7 @@ object AiAskService {
     }
 
 
-    private suspend fun uploadRagDocument(
+    private suspend fun uploadDocumentForAsk(
         context: Context,
         uri: Uri,
         displayName: String?
@@ -145,10 +146,17 @@ object AiAskService {
         val mimeType = contentResolver.getType(uri) ?: "application/octet-stream"
         val fileName = displayName ?: queryDisplayName(contentResolver, uri) ?: "upload.${guessExtension(mimeType)}"
 
+        val supportedFile = mimeType.startsWith("image/") ||
+            mimeType == "application/pdf" ||
+            fileName.endsWith(".pdf", ignoreCase = true)
+        if (!supportedFile) {
+            throw IllegalArgumentException("Unsupported file type. Please upload a PDF or image.")
+        }
+
         val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
             ?: throw IllegalArgumentException("Could not read selected file")
 
-        Log.d(TAG, "Uploading RAG document: filename=$fileName, mimeType=$mimeType, size=${bytes.size}")
+        Log.d(TAG, "Uploading document for ask: filename=$fileName, mimeType=$mimeType, size=${bytes.size}")
 
         val body = bytes.toRequestBody(mimeType.toMediaTypeOrNull())
         val part = MultipartBody.Part.createFormData("file", fileName, body)
@@ -156,19 +164,12 @@ object AiAskService {
         var lastError: Throwable? = null
         repeat(UPLOAD_RETRY_ATTEMPTS) { attempt ->
             try {
-                val response = when {
-                    mimeType.startsWith("image/") -> RetrofitClient.instance.uploadRagImage(part)
-                    mimeType == "application/pdf" || fileName.endsWith(".pdf", ignoreCase = true) -> {
-                        RetrofitClient.instance.uploadRagPdf(part)
-                    }
-                    else -> throw IllegalArgumentException("Unsupported file type: $mimeType")
+                val response = RetrofitClient.instance.uploadDocument(part)
+                val documentId = response.id.trim()
+                if (documentId.isBlank()) {
+                    throw IllegalStateException("Upload succeeded but response document id is empty")
                 }
-
-                if (!response.success) {
-                    throw Exception("Server rejected upload: ${response.status}")
-                }
-
-                return@withContext response.documentId ?: throw Exception("No documentId in upload response")
+                return@withContext documentId
             } catch (e: IllegalArgumentException) {
                 throw e
             } catch (e: Exception) {
@@ -188,7 +189,7 @@ object AiAskService {
         documentId: String,
         question: String
     ): String = withContext(Dispatchers.IO) {
-        val response = RetrofitClient.instance.sendQuestion(documentId, DocumentChatRequest(question))
+        val response = askWithReadyRetry(documentId, question)
         val answer = response.answer.trim()
         if (answer.isBlank()) {
             throw Exception("AI returned an empty response")
@@ -205,55 +206,31 @@ object AiAskService {
         answer
     }
 
-    private suspend fun pollDocumentStatus(
-        sessionId: String,
-        documentId: String
-    ) = withContext(Dispatchers.IO) {
-        Log.d(TAG, "Polling document status for documentId=$documentId")
-        var pollCount = 0
-
-        while (pollCount < MAX_POLL_RETRIES) {
+    private suspend fun askWithReadyRetry(documentId: String, question: String): ChatResponse {
+        var lastError: Throwable? = null
+        repeat(CHAT_READY_RETRY_ATTEMPTS) { attempt ->
             try {
-                val status = RetrofitClient.instance.getDocumentStatus(documentId)
-                Log.d(TAG, "Document status: $status")
-
-                when (status.status) {
-                    "COMPLETED" -> {
-                        Log.d(TAG, "Document processing completed")
-                        updateSession(sessionId) { it.copy(state = AskState.COMPLETED) }
-                        return@withContext
-                    }
-                    "FAILED" -> {
-                        val errorMsg = status.errorMessage ?: "Unknown error"
-                        Log.e(TAG, "Document processing failed: $errorMsg")
-                        updateSession(sessionId) {
-                            it.copy(
-                                state = AskState.ERROR,
-                                errorMessage = errorMsg
-                            )
-                        }
-                        throw Exception("Document processing failed: $errorMsg")
-                    }
-                    "PROCESSING" -> {
-                        Log.d(TAG, "Document still processing... (${status.progress ?: 0}%)")
-                        pollCount++
-                        delay(POLL_INTERVAL_MS)
-                    }
-                    else -> {
-                        throw Exception("Unknown status: ${status.status}")
-                    }
-                }
+                return RetrofitClient.instance.sendQuestion(documentId, DocumentChatRequest(question))
             } catch (e: Exception) {
-                if (e is IllegalArgumentException || e.localizedMessage?.contains("Unknown status") == true) {
+                val shouldRetry = isTransientNotReadyError(e)
+                if (!shouldRetry || attempt == CHAT_READY_RETRY_ATTEMPTS - 1) {
                     throw e
                 }
-                Log.w(TAG, "Error checking status, will retry", e)
-                pollCount++
-                delay(POLL_INTERVAL_MS)
+                lastError = e
+                delay(CHAT_READY_RETRY_DELAY_MS * (attempt + 1))
             }
         }
+        throw lastError ?: IllegalStateException("Failed to ask against document")
+    }
 
-        throw Exception("Document processing timeout after ${MAX_POLL_RETRIES * POLL_INTERVAL_MS}ms")
+    private fun isTransientNotReadyError(error: Exception): Boolean {
+        val message = error.localizedMessage.orEmpty().lowercase()
+        if (error is HttpException) {
+            if (error.code() in listOf(409, 423, 425, 429, 503)) return true
+        }
+        return message.contains("processing") ||
+            message.contains("not ready") ||
+            message.contains("try again")
     }
 
     private fun updateSession(sessionId: String, update: (AiAskSession) -> AiAskSession) {

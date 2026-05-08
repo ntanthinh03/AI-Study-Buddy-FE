@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -21,6 +22,11 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Quiz
 import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -45,11 +51,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.thinh.aistudybuddy.data.model.ModuleStatus
-import com.thinh.aistudybuddy.data.model.ChatMessage
+import com.thinh.aistudybuddy.data.models.*
 import com.thinh.aistudybuddy.viewmodel.ChatViewModel
 import com.thinh.aistudybuddy.viewmodel.ConversationStudyPlanItem
 import com.thinh.aistudybuddy.viewmodel.ConversationStudyPlanLessonItem
@@ -69,6 +75,8 @@ fun ConversationHistoryScreen(
     onOpenLesson: (planRawJson: String, lessonId: String) -> Unit,
     timelineStatusByDocumentId: Map<String, ModuleStatus>,
     onRefresh: (String) -> Unit,
+    onStartQuiz: (ChatMessage) -> Unit,
+    onCheckPlan: (String?) -> Unit,
     chatViewModel: ChatViewModel = viewModel()
 ) {
     var viewMode by remember { mutableStateOf(HistoryViewMode.ARTIFACTS) }
@@ -203,11 +211,8 @@ fun ConversationHistoryScreen(
                     items(historyItems) { message ->
                         HistoryArtifactCard(
                             message = message,
-                            onClick = {
-                                if (message.showStudyPlanButton) {
-                                    viewMode = HistoryViewMode.COURSES
-                                }
-                            }
+                            onStartQuiz = { onStartQuiz(message) },
+                            onCheckPlan = { onCheckPlan(message.planJson) }
                         )
                     }
                 }
@@ -298,11 +303,25 @@ fun ConversationHistoryScreen(
 }
 
 @Composable
-private fun HistoryArtifactCard(message: ChatMessage, onClick: () -> Unit) {
+private fun HistoryArtifactCard(
+    message: ChatMessage,
+    onStartQuiz: () -> Unit,
+    onCheckPlan: () -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
     val isQuiz = message.showQuizButton
     val (icon, title, accent) = when {
         isQuiz -> Triple(Icons.Default.Quiz, "Quiz", Color(0xFF00E5FF))
         else -> Triple(Icons.Default.School, "Study Plan", Color(0xFF4CAF50))
+    }
+
+    // Try to find a specific name for the quiz/course
+    val specificName = when {
+        !message.specificTitle.isNullOrBlank() -> message.specificTitle
+        !message.messageLabel.isNullOrBlank() -> message.messageLabel
+        !message.attachmentName.isNullOrBlank() -> message.attachmentName
+        message.courses.isNotEmpty() -> message.courses.first().title
+        else -> null
     }
 
     Card(
@@ -310,25 +329,95 @@ private fun HistoryArtifactCard(message: ChatMessage, onClick: () -> Unit) {
         shape = RoundedCornerShape(18.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() }
+            .clickable { expanded = !expanded }
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(imageVector = icon, contentDescription = null, tint = accent, modifier = Modifier.size(20.dp))
                 Spacer(modifier = Modifier.size(10.dp))
-                Text(text = title, color = Color.White, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.weight(1f))
-                Icon(imageVector = Icons.Default.ChevronRight, contentDescription = null, tint = accent, modifier = Modifier.size(18.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    if (specificName != null) {
+                        Text(
+                            text = specificName,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(text = title, color = accent, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                    } else {
+                        Text(text = title, color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+                Icon(
+                    imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier.size(20.dp)
+                )
             }
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(
-                text = message.text.ifBlank { if (isQuiz) "Quiz is ready." else "Plan is ready." },
-                color = Color.LightGray,
-                fontSize = 14.sp,
-                lineHeight = 20.sp
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-                HorizontalDivider(color = accent.copy(alpha = 0.35f), thickness = 1.dp)
+            
+            androidx.compose.animation.AnimatedVisibility(visible = expanded) {
+                Column {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = message.text.ifBlank { if (isQuiz) "Quiz is ready." else "Plan is ready." },
+                        color = Color.LightGray,
+                        fontSize = 14.sp,
+                        lineHeight = 20.sp
+                    )
+                    
+                    if (!message.isUser && (message.showQuizButton || message.showStudyPlanButton)) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            if (message.showQuizButton) {
+                                Button(
+                                    onClick = onStartQuiz,
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E5FF)),
+                                    shape = RoundedCornerShape(12.dp),
+                                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
+                                    modifier = Modifier.height(40.dp)
+                                ) {
+                                    Icon(Icons.Default.PlayArrow, null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Start Quiz", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                }
+                            }
+                            if (message.showStudyPlanButton) {
+                                Button(
+                                    onClick = onCheckPlan,
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E5FF)),
+                                    shape = RoundedCornerShape(12.dp),
+                                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
+                                    modifier = Modifier.height(40.dp)
+                                ) {
+                                    Icon(Icons.Default.Visibility, null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("View Course", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                }
+                            }
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    HorizontalDivider(color = accent.copy(alpha = 0.2f), thickness = 1.dp)
+                }
+            }
+            
+            if (!expanded) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = message.text.ifBlank { if (isQuiz) "Quiz is ready." else "Plan is ready." },
+                    color = Color.Gray,
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }

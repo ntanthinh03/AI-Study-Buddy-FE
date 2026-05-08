@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.thinh.aistudybuddy.data.local.SessionStore
+import com.thinh.aistudybuddy.data.local.TokenDataStore
 import com.thinh.aistudybuddy.data.network.RetrofitClient
 import com.thinh.aistudybuddy.ui.components.AuthTextField
 import com.thinh.aistudybuddy.ui.components.BuddyLogo
@@ -152,12 +153,16 @@ fun LoginScreen(
                 onClick = {
                     loginViewModel.onLoginClick { displayName ->
                         val token = RetrofitClient.authToken
-                        if (!token.isNullOrBlank()) {
-                            SessionStore.saveSession(context, token, rememberLogin, displayName)
-                        } else {
-                            SessionStore.clearSession(context)
-                        }
                         scope.launch {
+                            if (!token.isNullOrBlank()) {
+                                // persist token both to legacy SessionStore and to DataStore
+                                SessionStore.saveSession(context, token, rememberLogin, displayName)
+                                TokenDataStore.saveToken(context, token)
+                            } else {
+                                SessionStore.clearSession(context)
+                                TokenDataStore.clearToken(context)
+                            }
+
                             Toast.makeText(context, "Login Successful!", Toast.LENGTH_SHORT).show()
                             onLoginSuccess(displayName)
                         }

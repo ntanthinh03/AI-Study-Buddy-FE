@@ -1,4 +1,4 @@
-package com.thinh.aistudybuddy.data.model
+package com.thinh.aistudybuddy.data.models
 
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonObject
@@ -58,11 +58,6 @@ val DEFAULT_STUDY_PLAN_JSON = """
 }
 """
 
-enum class ModuleStatus {
-    LOCKED,
-    IN_PROGRESS,
-    COMPLETED
-}
 
 data class ModuleQuizConfig(
     @SerializedName("recommendedQuestionCount")
@@ -105,28 +100,6 @@ data class StudyPlanResponse(
     val modules: List<StudyModule>
 )
 
-data class StudyProgressItem(
-    @SerializedName("documentId")
-    val documentId: String,
-    @SerializedName("fileName")
-    val fileName: String,
-    @SerializedName("status")
-    val status: ModuleStatus,
-    @SerializedName("score")
-    val score: Int
-)
-
-data class ProgressInitRequest(
-    @SerializedName("documentId")
-    val documentId: String
-)
-
-data class ProgressCompleteRequest(
-    @SerializedName("documentId")
-    val documentId: String,
-    @SerializedName("score")
-    val score: Int
-)
 
 object StudyPlanJsonParser {
     private val gson = GsonBuilder().create()

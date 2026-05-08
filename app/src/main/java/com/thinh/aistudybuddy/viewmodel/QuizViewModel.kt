@@ -12,11 +12,9 @@ import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
-import com.thinh.aistudybuddy.data.local.LocalHistoryStore
+import com.thinh.aistudybuddy.data.models.*
+import com.thinh.aistudybuddy.data.local.*
 import com.thinh.aistudybuddy.data.network.RetrofitClient
-import com.thinh.aistudybuddy.data.model.QuizQuestion
-import com.thinh.aistudybuddy.data.SaveDocumentArtifactRequest
-import com.thinh.aistudybuddy.data.SaveLessonQuizRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
@@ -320,7 +318,7 @@ class QuizViewModel : ViewModel() {
                 }
             } catch (e: HttpException) {
                 if (e.code() == 401) {
-                    RetrofitClient.authToken = null
+                    RetrofitClient.updateAuthToken(null)
                 }
             } catch (_: IOException) {
             } catch (_: Exception) {

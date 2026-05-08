@@ -11,6 +11,7 @@ import androidx.navigation.compose.rememberNavController
 import com.thinh.aistudybuddy.data.local.LocalHistoryStore
 import com.thinh.aistudybuddy.data.local.NetworkConfigStore
 import com.thinh.aistudybuddy.data.local.SessionStore
+import com.thinh.aistudybuddy.data.local.TokenDataStore
 import com.thinh.aistudybuddy.data.network.RetrofitClient
 import com.thinh.aistudybuddy.ui.theme.AppNavigation
 import com.thinh.aistudybuddy.ui.theme.FEBuddyTheme
@@ -21,9 +22,16 @@ class MainActivity : ComponentActivity() {
         LocalHistoryStore.initialize(applicationContext)
         RetrofitClient.setBaseUrlOverride(NetworkConfigStore.readBaseUrl(applicationContext))
         val session = SessionStore.readSession(applicationContext)
-        RetrofitClient.authToken = if (session.rememberLogin) session.token else null
+        val persistedToken = TokenDataStore.readToken(applicationContext)
+        val startupToken = if (session.rememberLogin) {
+            session.token ?: persistedToken
+        } else {
+            null
+        }
+        RetrofitClient.updateAuthToken(startupToken)
         if (!session.rememberLogin) {
             SessionStore.clearSession(applicationContext)
+            TokenDataStore.clearToken(applicationContext)
         }
         setContent {
             val navController = rememberNavController()

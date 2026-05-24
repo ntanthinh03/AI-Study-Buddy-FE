@@ -14,9 +14,10 @@ import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.thinh.aistudybuddy.data.models.*
 import com.thinh.aistudybuddy.data.local.*
-import com.thinh.aistudybuddy.data.network.RetrofitClient
+import com.thinh.aistudybuddy.services.network.RetrofitClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import retrofit2.HttpException
 import java.io.IOException
 import java.util.UUID
@@ -31,14 +32,19 @@ class QuizViewModel : ViewModel() {
     }
     var isNewRecord by mutableStateOf(false)
     var onQuizComplete: ((Int) -> Unit)? = null
+    var isLoadingMoreQuestions by mutableStateOf(false)
+    var hasMoreQuestionsToGenerate by mutableStateOf(true)
     private val _questions = mutableStateListOf<QuizQuestion>()
     val questions: List<QuizQuestion> get() = _questions
+
+    var isGeneratingQuiz by mutableStateOf(false)
+    var quizGenerationError by mutableStateOf<String?>(null)
 
     var currentQuestionIndex by mutableIntStateOf(0)
     var score by mutableIntStateOf(0)
     private var currentSessionId by mutableStateOf(UUID.randomUUID().toString())
     private var currentQuizTitle by mutableStateOf("Quiz Session")
-    private var currentDocumentId by mutableStateOf<String?>(null)
+    var currentDocumentId by mutableStateOf<String?>(null)
     private var currentLessonId by mutableStateOf<String?>(null)
     private var currentQuizId by mutableStateOf<String?>(null)
 
@@ -143,7 +149,8 @@ class QuizViewModel : ViewModel() {
         newQuestions: List<QuizQuestion>,
         documentId: String? = currentDocumentId,
         lessonId: String? = currentLessonId,
-        title: String? = currentQuizTitle
+        title: String? = currentQuizTitle,
+        quizId: String? = null
     ) {
         currentSessionId = UUID.randomUUID().toString()
         currentQuizTitle = title?.takeIf { it.isNotBlank() } ?: "Quiz Session"
@@ -161,9 +168,10 @@ class QuizViewModel : ViewModel() {
         currentQuestionIndex = 0
         score = 0
         isNewRecord = false
-        currentQuizId = null
+        currentQuizId = quizId
+        hasMoreQuestionsToGenerate = true
+        isLoadingMoreQuestions = false
         persistQuizState()
-        persistQuizToBackend()
     }
 
     fun setQuizBackendContext(documentId: String? = null, lessonId: String? = null, title: String? = null) {
@@ -216,6 +224,10 @@ class QuizViewModel : ViewModel() {
         if (currentQuestionIndex < _questions.size - 1) {
             currentQuestionIndex++
             persistQuizState()
+
+            if (_questions.size < 20 && hasMoreQuestionsToGenerate && currentQuestionIndex >= _questions.size - 2) {
+                loadMoreQuestionsProgressively()
+            }
         }
     }
 
@@ -229,6 +241,77 @@ class QuizViewModel : ViewModel() {
     fun jumpToQuestion(index: Int) {
         currentQuestionIndex = index
         persistQuizState()
+
+        if (_questions.size < 20 && hasMoreQuestionsToGenerate && currentQuestionIndex >= _questions.size - 2) {
+            loadMoreQuestionsProgressively()
+        }
+    }
+
+    fun loadMoreQuestionsProgressively() {
+        val quizId = currentQuizId ?: return
+        if (isLoadingMoreQuestions || !hasMoreQuestionsToGenerate || _questions.size >= 20) return
+
+        isLoadingMoreQuestions = true
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                Log.d(TAG, "Loading more questions progressively for quizId=$quizId")
+                val response = RetrofitClient.instance.generateMoreQuestions(quizId)
+                val newBackendQuestions = response.questions
+
+                val newUiQuestions = newBackendQuestions.mapIndexed { idx, item ->
+                    val ordered = listOf("A", "B", "C", "D")
+                        .mapNotNull { key -> item.options[key] }
+                        .ifEmpty { item.options.values.toList() }
+                        .take(4)
+                    val safeOptions = if (ordered.size == 4) ordered else listOf("Option A", "Option B", "Option C", "Option D")
+                    val normalized = item.correctAnswer.trim()
+                    val answerIndex = when (normalized.uppercase()) {
+                        "A" -> 0
+                        "B" -> 1
+                        "C" -> 2
+                        "D" -> 3
+                        else -> {
+                            val found = safeOptions.indexOfFirst { it.equals(normalized, ignoreCase = true) }
+                            if (found >= 0) found else 0
+                        }
+                    }
+                    QuizQuestion(
+                        id = "api-prog-${idx + 1}",
+                        question = item.question,
+                        options = safeOptions,
+                        correctAnswerIndex = answerIndex,
+                        hint = "Choose the best answer.",
+                        explanation = item.explanation
+                    )
+                }
+
+                withContext(Dispatchers.Main) {
+                    if (newUiQuestions.size > _questions.size) {
+                        val addedQuestions = newUiQuestions.drop(_questions.size)
+                        _questions.addAll(addedQuestions)
+
+                        repeat(addedQuestions.size) {
+                            userAnswers.add(-1)
+                            submittedQuestions.add(false)
+                        }
+
+                        persistQuizState()
+                        Log.d(TAG, "Successfully appended ${addedQuestions.size} progressive questions. Total: ${_questions.size}")
+                    }
+
+                    if (response.completed || _questions.size >= 20) {
+                        hasMoreQuestionsToGenerate = false
+                        Log.d(TAG, "Progressive generation finished. hasMoreQuestionsToGenerate = false")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed loading more questions progressively", e)
+            } finally {
+                withContext(Dispatchers.Main) {
+                    isLoadingMoreQuestions = false
+                }
+            }
+        }
     }
 
     fun resetQuiz() {
@@ -308,7 +391,7 @@ class QuizViewModel : ViewModel() {
                     }
 
                     !currentDocumentId.isNullOrBlank() -> {
-                        // For chat/document quizzes, we also save to the main quizzes table to get a quizId for analytics
+                        
                         val createDto = CreateQuizDto(
                             documentId = currentDocumentId!!,
                             questions = _questions.toList(),
@@ -317,16 +400,6 @@ class QuizViewModel : ViewModel() {
                         )
                         val saveResponse = RetrofitClient.instance.saveQuiz(createDto)
                         currentQuizId = saveResponse.quizId
-                        
-                        // Also keep as artifact in chat history
-                        RetrofitClient.instance.saveDocumentArtifact(
-                            currentDocumentId!!,
-                            SaveDocumentArtifactRequest(
-                                artifactType = "QUIZ",
-                                artifact = quizPayload,
-                                note = "Quiz saved for the signed-in account"
-                            )
-                        )
                     }
                 }
             } catch (e: HttpException) {
@@ -405,5 +478,69 @@ class QuizViewModel : ViewModel() {
                 })
             }
         }
+    }
+
+    fun generateQuizForDocument(documentId: String) {
+        isGeneratingQuiz = true
+        quizGenerationError = null
+        _questions.clear()
+        currentDocumentId = documentId
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val response = RetrofitClient.instance.generateQuiz(documentId)
+                val uiQuestions = response.questions.toUiQuizQuestions()
+                withContext(Dispatchers.Main) {
+                    loadQuestions(
+                        newQuestions = uiQuestions,
+                        documentId = documentId,
+                        title = "Quiz: Document",
+                        quizId = response.quizId
+                    )
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to generate quiz", e)
+                withContext(Dispatchers.Main) {
+                    quizGenerationError = e.localizedMessage ?: "Failed to generate quiz. Please try again."
+                }
+            } finally {
+                withContext(Dispatchers.Main) {
+                    isGeneratingQuiz = false
+                }
+            }
+        }
+    }
+
+    private fun List<BackendQuizQuestion>.toUiQuizQuestions(): List<QuizQuestion> {
+        return mapIndexed { idx, item ->
+            val ordered = listOf("A", "B", "C", "D")
+                .mapNotNull { key -> item.options[key] }
+                .ifEmpty { item.options.values.toList() }
+                .take(4)
+            val safeOptions = if (ordered.size == 4) ordered else listOf("Option A", "Option B", "Option C", "Option D")
+            val answerIndex = orderedAnswerIndexForGeneration(item.correctAnswer, safeOptions)
+            QuizQuestion(
+                id = "api-${idx + 1}",
+                question = item.question,
+                options = safeOptions,
+                correctAnswerIndex = answerIndex,
+                hint = "Choose the best answer.",
+                explanation = item.explanation
+            )
+        }
+    }
+
+    private fun orderedAnswerIndexForGeneration(answerRaw: String, options: List<String>): Int {
+        val normalized = answerRaw.trim()
+        val byLetter = when (normalized.uppercase()) {
+            "A" -> 0
+            "B" -> 1
+            "C" -> 2
+            "D" -> 3
+            else -> -1
+        }
+        if (byLetter in options.indices) return byLetter
+        val byText = options.indexOfFirst { it.equals(normalized, ignoreCase = true) }
+        return if (byText >= 0) byText else 0
     }
 }

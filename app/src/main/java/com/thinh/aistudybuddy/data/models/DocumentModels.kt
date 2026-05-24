@@ -19,7 +19,10 @@ data class DocumentStatusResponse(
     val errorMessage: String? = null
 )
 
-data class DocumentChatRequest(@SerializedName("question") val question: String)
+data class DocumentChatRequest(
+    @SerializedName("question") val question: String,
+    @SerializedName("conversationId") val conversationId: String? = null
+)
 
 data class RagUploadResponse(
     val success: Boolean, 
@@ -34,12 +37,3 @@ data class SaveDocumentArtifactRequest(
     val note: String? = null
 )
 
-data class MindMapNode(
-    val id: String,
-    val label: String,
-    val parentId: String? = null
-)
-
-data class MindMapResponse(
-    val nodes: List<MindMapNode>
-)

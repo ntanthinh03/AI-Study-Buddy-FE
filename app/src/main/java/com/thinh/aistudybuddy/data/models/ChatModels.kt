@@ -15,6 +15,7 @@ data class ChatMessage(
     val showQuizButton: Boolean = false,
     val showStudyPlanButton: Boolean = false,
     val showFlashcardButton: Boolean = false,
+    val showMindMapButton: Boolean = false,
     val documentId: String? = null,
     val planJson: String? = null,
     val specificTitle: String? = null,
@@ -56,7 +57,8 @@ data class BackendChatMessage(
     val artifactType: String? = null,
     val artifactJson: JsonElement? = null,
     val imageMimeType: String? = null,
-    val imageOriginalName: String? = null
+    val imageOriginalName: String? = null,
+    val attachmentName: String? = null
 )
 
 data class ConversationMessage(
@@ -69,7 +71,8 @@ data class ConversationMessage(
     val artifactJson: JsonElement? = null,
     val createdAt: String? = null,
     val imageMimeType: String? = null,
-    val imageOriginalName: String? = null
+    val imageOriginalName: String? = null,
+    @SerializedName("attachmentName") val attachmentName: String? = null
 )
 
 data class AskAiRequest(
@@ -85,10 +88,18 @@ data class ChatAskResponse(
     val messageId: String,
     val question: String,
     val answer: String,
-    val createdAt: String
+    val createdAt: String,
+    val artifactType: String? = null,
+    val artifactData: JsonElement? = null
 )
 
-data class ChatResponse(val answer: String)
+data class ChatResponse(
+    val conversationId: String? = null,
+    val messageId: String? = null,
+    val answer: String,
+    val artifactType: String? = null,
+    val artifactData: JsonElement? = null
+)
 
 data class ConversationInfo(
     @SerializedName("conversationId") val id: String,
@@ -138,4 +149,8 @@ data class Suggestion(
 data class Banner(
     val title: String,
     val ctaText: String
+)
+
+data class RenameConversationRequest(
+    @SerializedName("title") val title: String
 )

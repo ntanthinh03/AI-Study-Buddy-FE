@@ -23,8 +23,8 @@ data class StudyActivity(
     val totalQuestions: Int,
     val correctAnswers: Int,
     val durationSeconds: Int,
-    @SerializedName("created_at")
-    val createdAt: String
+    @SerializedName(value = "createdAt", alternate = ["created_at"])
+    val createdAt: String?
 )
 
 data class ChartDataPoint(

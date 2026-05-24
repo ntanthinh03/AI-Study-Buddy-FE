@@ -7,7 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.thinh.aistudybuddy.data.models.*
-import com.thinh.aistudybuddy.data.network.RetrofitClient
+import com.thinh.aistudybuddy.services.network.RetrofitClient
 import retrofit2.Response
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch

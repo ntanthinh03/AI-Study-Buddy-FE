@@ -8,9 +8,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.thinh.aistudybuddy.data.models.Flashcard
 import com.thinh.aistudybuddy.data.models.ReviewUpdateRequest
-import com.thinh.aistudybuddy.data.network.RetrofitClient
+import com.thinh.aistudybuddy.services.network.RetrofitClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
 import retrofit2.HttpException
 import java.io.IOException
 
@@ -23,49 +25,141 @@ class FlashcardViewModel : ViewModel() {
 
     var isLoading by mutableStateOf(false)
     var isGenerating by mutableStateOf(false)
+    var hasLoadedFlashcards by mutableStateOf(false)
+    var hasLoadedReviewFlashcards by mutableStateOf(false)
     var error by mutableStateOf<String?>(null)
+    var notice by mutableStateOf<String?>(null)
+    var focusDocumentId by mutableStateOf<String?>(null)
+
+    fun hasFlashcardsForDocument(documentId: String): Boolean {
+        return _flashcards.any { it.documentId == documentId }
+    }
+
+    fun focusDocument(documentId: String?) {
+        focusDocumentId = documentId?.takeIf { it.isNotBlank() }
+    }
+
+    fun showNotice(message: String, durationMillis: Long = 3000L) {
+        viewModelScope.launch {
+            notice = message
+            delay(durationMillis)
+            if (notice == message) {
+                notice = null
+            }
+        }
+    }
+
+    fun clearNotice() {
+        viewModelScope.launch {
+            notice = null
+        }
+    }
 
     fun loadAllFlashcards() {
         viewModelScope.launch(Dispatchers.IO) {
-            isLoading = true
-            error = null
+            withContext(Dispatchers.Main) {
+                isLoading = true
+                hasLoadedFlashcards = false
+                error = null
+            }
             try {
                 val result = RetrofitClient.instance.getFlashcards()
-                _flashcards.clear()
-                _flashcards.addAll(result)
+                withContext(Dispatchers.Main) {
+                    _flashcards.clear()
+                    _flashcards.addAll(result)
+                }
             } catch (e: Exception) {
-                error = "Failed to load flashcards: ${e.message}"
+                withContext(Dispatchers.Main) {
+                    error = "Failed to load flashcards: ${e.message}"
+                }
             } finally {
-                isLoading = false
+                withContext(Dispatchers.Main) {
+                    isLoading = false
+                    hasLoadedFlashcards = true
+                }
             }
         }
     }
 
     fun loadFlashcardsToReview() {
         viewModelScope.launch(Dispatchers.IO) {
-            error = null
+            withContext(Dispatchers.Main) {
+                hasLoadedReviewFlashcards = false
+                error = null
+            }
             try {
                 val result = RetrofitClient.instance.getFlashcardsToReview()
-                _flashcardsToReview.clear()
-                _flashcardsToReview.addAll(result)
+                withContext(Dispatchers.Main) {
+                    _flashcardsToReview.clear()
+                    _flashcardsToReview.addAll(result)
+                }
             } catch (e: Exception) {
-                error = "Failed to load reviews: ${e.message}"
+                withContext(Dispatchers.Main) {
+                    error = "Failed to load reviews: ${e.message}"
+                }
+            } finally {
+                withContext(Dispatchers.Main) {
+                    hasLoadedReviewFlashcards = true
+                }
             }
         }
     }
 
-    fun generateFlashcards(documentId: String) {
+    fun generateFlashcards(documentId: String, onComplete: ((Boolean) -> Unit)? = null) {
         viewModelScope.launch(Dispatchers.IO) {
-            isGenerating = true
-            error = null
+            if (documentId.isBlank()) {
+                withContext(Dispatchers.Main) {
+                    error = "Missing document id for flashcard generation."
+                    onComplete?.invoke(false)
+                }
+                return@launch
+            }
+
+            withContext(Dispatchers.Main) {
+                if (isGenerating) {
+                    onComplete?.invoke(false)
+                    return@withContext
+                }
+                isGenerating = true
+                error = null
+                notice = null
+            }
             try {
+                val existingFlashcards = if (_flashcards.isNotEmpty()) {
+                    _flashcards.filter { it.documentId == documentId }
+                } else {
+                    val allFlashcards = RetrofitClient.instance.getFlashcards()
+                    withContext(Dispatchers.Main) {
+                        _flashcards.clear()
+                        _flashcards.addAll(allFlashcards)
+                    }
+                    allFlashcards.filter { it.documentId == documentId }
+                }
+
+                if (existingFlashcards.isNotEmpty()) {
+                    withContext(Dispatchers.Main) {
+                        showNotice("Flashcards for this PDF already exist. Opening Flashcards Library.")
+                        onComplete?.invoke(false)
+                    }
+                    return@launch
+                }
+
                 val result = RetrofitClient.instance.generateFlashcards(documentId)
-                // Add to list immediately so they appear even if we don't reload
-                _flashcards.addAll(0, result)
+                withContext(Dispatchers.Main) {
+                    _flashcards.removeAll { it.documentId == documentId }
+                    _flashcards.addAll(0, result)
+                    showNotice("Flashcards generated successfully. Opening Flashcards Library.")
+                    onComplete?.invoke(true)
+                }
             } catch (e: Exception) {
-                error = "Failed to generate flashcards: ${e.message}"
+                withContext(Dispatchers.Main) {
+                    error = "Failed to generate flashcards: ${e.message}"
+                    onComplete?.invoke(false)
+                }
             } finally {
-                isGenerating = false
+                withContext(Dispatchers.Main) {
+                    isGenerating = false
+                }
             }
         }
     }
@@ -77,25 +171,39 @@ class FlashcardViewModel : ViewModel() {
                     flashcardId,
                     ReviewUpdateRequest(isCorrect)
                 )
-                loadFlashcardsToReview()
+                withContext(Dispatchers.Main) {
+                    loadAllFlashcards()
+                    loadFlashcardsToReview()
+                }
             } catch (e: Exception) {
-                error = "Failed to update review: ${e.message}"
+                withContext(Dispatchers.Main) {
+                    error = "Failed to update review: ${e.message}"
+                }
             }
         }
     }
 
     fun addManualFlashcard(front: String, back: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            isLoading = true
+            withContext(Dispatchers.Main) {
+                isLoading = true
+                error = null
+            }
             try {
                 val result = RetrofitClient.instance.createFlashcard(
                     com.thinh.aistudybuddy.data.models.CreateFlashcardRequest(front, back)
                 )
-                _flashcards.add(0, result)
+                withContext(Dispatchers.Main) {
+                    _flashcards.add(0, result)
+                }
             } catch (e: Exception) {
-                error = "Failed to add flashcard: ${e.message}"
+                withContext(Dispatchers.Main) {
+                    error = "Failed to add flashcard: ${e.message}"
+                }
             } finally {
-                isLoading = false
+                withContext(Dispatchers.Main) {
+                    isLoading = false
+                }
             }
         }
     }

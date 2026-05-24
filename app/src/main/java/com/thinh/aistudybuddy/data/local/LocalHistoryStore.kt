@@ -9,7 +9,7 @@ import com.thinh.aistudybuddy.data.models.*
 import java.io.File
 
 private const val HISTORY_FILE_NAME = "study_buddy_history.json"
-private const val HISTORY_SCHEMA_VERSION = 2
+private const val HISTORY_SCHEMA_VERSION = 3
 
 private val gson: Gson = GsonBuilder().create()
 
@@ -46,7 +46,14 @@ data class CachedChatMessage(
     val isUser: Boolean,
     val attachmentName: String? = null,
     val showQuizButton: Boolean = false,
-    val showStudyPlanButton: Boolean = false
+    val showStudyPlanButton: Boolean = false,
+    val showFlashcardButton: Boolean = false,
+    val showMindMapButton: Boolean = false,
+    val documentId: String? = null,
+    val planJson: String? = null,
+    val artifactType: String? = null,
+    val artifactJson: com.google.gson.JsonElement? = null,
+    val createdAt: String = ""
 )
 
 data class CachedQuizSession(
@@ -231,7 +238,14 @@ object LocalHistoryStore {
         isUser = isUser,
         attachmentName = attachmentName,
         showQuizButton = showQuizButton,
-        showStudyPlanButton = showStudyPlanButton
+        showStudyPlanButton = showStudyPlanButton,
+        showFlashcardButton = showFlashcardButton,
+        showMindMapButton = showMindMapButton,
+        documentId = documentId,
+        planJson = planJson,
+        artifactType = artifactType,
+        artifactJson = artifactJson,
+        createdAt = createdAt
     )
 
     private fun CachedChatMessage.toRuntime(): ChatMessage = ChatMessage(
@@ -240,7 +254,14 @@ object LocalHistoryStore {
         isUser = isUser,
         attachmentName = attachmentName,
         showQuizButton = showQuizButton,
-        showStudyPlanButton = showStudyPlanButton
+        showStudyPlanButton = showStudyPlanButton,
+        showFlashcardButton = showFlashcardButton,
+        showMindMapButton = showMindMapButton,
+        documentId = documentId,
+        planJson = planJson,
+        artifactType = artifactType,
+        artifactJson = artifactJson,
+        createdAt = createdAt
     )
 }
 

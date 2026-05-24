@@ -26,6 +26,12 @@ data class GenerateQuizResponse(
     val questions: List<BackendQuizQuestion>
 )
 
+data class GenerateMoreQuestionsResponse(
+    val quizId: String,
+    val questions: List<BackendQuizQuestion>,
+    val completed: Boolean
+)
+
 data class Quiz(
     @SerializedName("quizId") val id: String,
     val quizName: String? = null,

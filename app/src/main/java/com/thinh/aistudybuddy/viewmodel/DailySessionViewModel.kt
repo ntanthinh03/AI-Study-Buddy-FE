@@ -3,7 +3,7 @@ package com.thinh.aistudybuddy.viewmodel
 import androidx.compose.runtime.*
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.thinh.aistudybuddy.data.network.RetrofitClient
+import com.thinh.aistudybuddy.services.network.RetrofitClient
 import retrofit2.Response
 import com.thinh.aistudybuddy.data.models.*
 import kotlinx.coroutines.launch

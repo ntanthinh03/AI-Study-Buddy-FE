@@ -14,12 +14,12 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
-import com.thinh.aistudybuddy.data.AiAskService
+import com.thinh.aistudybuddy.services.AiAskService
 import com.thinh.aistudybuddy.data.models.*
 import com.thinh.aistudybuddy.data.models.BackendQuizQuestion as ApiQuizQuestion
 
 import com.thinh.aistudybuddy.data.local.*
-import com.thinh.aistudybuddy.data.network.RetrofitClient
+import com.thinh.aistudybuddy.services.network.RetrofitClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -63,6 +63,7 @@ class ChatViewModel : ViewModel() {
         private set
     var onQuizGenerated: ((List<QuizQuestion>) -> Unit)? = null
     var onPlanGenerated: ((String) -> Unit)? = null
+    var onMindMapGenerated: ((String) -> Unit)? = null
     var pendingPdfName by mutableStateOf<String?>(null)
         private set
     private var pendingPdfUri: Uri? = null
@@ -172,6 +173,8 @@ class ChatViewModel : ViewModel() {
         viewModelScope.launch {
             turnMutex.withLock {
                 val documentId = activeDocumentId
+                    ?: _conversations.find { it.id == activeConversationId }?.documentId
+                        ?.also { activeDocumentId = it }
                 if (documentId != null) {
                     logTurn(turnId, "user_sent_document", activeConversationId, "documentId=$documentId")
                     sendPersistedDocumentMessage(documentId, text, turnId)
@@ -229,6 +232,8 @@ class ChatViewModel : ViewModel() {
             return
         }
 
+        clearPendingPdf()
+
         viewModelScope.launch {
             turnMutex.withLock {
                 isUploading = true
@@ -258,6 +263,7 @@ class ChatViewModel : ViewModel() {
                 val processingMessageId = appendProcessingMessage(conversationId, "Reading document...")
                 persistChatState()
 
+                var currentId = conversationId
                 try {
                     val uploaded = uploadDocument(context, pdfUri, pdfName)
 
@@ -284,18 +290,35 @@ class ChatViewModel : ViewModel() {
                     }
                     persistChatState()
 
-                    val response = RetrofitClient.instance.sendQuestion(finalizedDocument.id, DocumentChatRequest(text))
+                    val response = RetrofitClient.instance.sendQuestion(finalizedDocument.id, DocumentChatRequest(text, conversationId))
+                    val resolvedConversationId = if (!response.conversationId.isNullOrBlank()) {
+                        rebindConversationId(conversationId, response.conversationId)
+                    } else {
+                        conversationId
+                    }
+                    currentId = resolvedConversationId
+
                     appendAiMessage(
-                        convId = conversationId,
+                        convId = resolvedConversationId,
                         text = response.answer,
-                        showFlashcardButton = true,
-                        documentId = finalizedDocument.id
+                        messageId = response.messageId,
+                        documentId = finalizedDocument.id,
+                        artifactType = response.artifactType,
+                        artifactJson = response.artifactData
                     )
+                    
+                    if (response.artifactType == "QUIZ" && response.artifactData != null && !response.artifactData.isJsonNull) {
+                        val questions = parseQuestionsFromJson(response.artifactData)
+                        onQuizGenerated?.invoke(questions)
+                    } else if (response.artifactType == "STUDY_PLAN" && response.artifactData != null && !response.artifactData.isJsonNull) {
+                        onPlanGenerated?.invoke(response.artifactData.toString())
+                    }
+
                     clearPendingPdf()
                     persistChatState()
-                    logTurn(turnId, "ai_reply_appended", conversationId, "source=documents_chat")
+                    logTurn(turnId, "ai_reply_appended", resolvedConversationId, "source=documents_chat")
                 } catch (e: HttpException) {
-                    val index = _conversations.indexOfFirst { it.id == conversationId }
+                    val index = _conversations.indexOfFirst { it.id == currentId }
                     if (index != -1) {
                         val updatedConv = _conversations[index]
                         updatedConv.chatMessages.removeIf { it.id == processingMessageId }
@@ -303,9 +326,9 @@ class ChatViewModel : ViewModel() {
                     }
                     uploadTerminalStatus = "FAILED"
                     handleHttpError(e)
-                    logTurn(turnId, "turn_http_error", conversationId, "code=${e.code()}")
+                    logTurn(turnId, "turn_http_error", currentId, "code=${e.code()}")
                 } catch (e: DocumentProcessingTimeoutException) {
-                    val index = _conversations.indexOfFirst { it.id == conversationId }
+                    val index = _conversations.indexOfFirst { it.id == currentId }
                     if (index != -1) {
                         val updatedConv = _conversations[index]
                         updatedConv.chatMessages.removeIf { it.id == processingMessageId }
@@ -313,9 +336,9 @@ class ChatViewModel : ViewModel() {
                     }
                     uploadTerminalStatus = "SKIPPED"
                     errorMessage = e.message
-                    logTurn(turnId, "turn_timeout", conversationId, "stage=document_pipeline")
+                    logTurn(turnId, "turn_timeout", currentId, "stage=document_pipeline")
                 } catch (e: Exception) {
-                    val index = _conversations.indexOfFirst { it.id == conversationId }
+                    val index = _conversations.indexOfFirst { it.id == currentId }
                     if (index != -1) {
                         val updatedConv = _conversations[index]
                         updatedConv.chatMessages.removeIf { it.id == processingMessageId }
@@ -323,7 +346,7 @@ class ChatViewModel : ViewModel() {
                     }
                     uploadTerminalStatus = "FAILED"
                     errorMessage = e.localizedMessage ?: "Failed to send PDF with message."
-                    logTurn(turnId, "turn_error", conversationId, e.javaClass.simpleName)
+                    logTurn(turnId, "turn_error", currentId, e.javaClass.simpleName)
                 } finally {
                     uploadStatusLabel = null
                     isTyping = false
@@ -548,21 +571,23 @@ class ChatViewModel : ViewModel() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val history = RetrofitClient.instance.getChatHistory(documentId)
-                val index = _conversations.indexOfFirst { it.documentId == documentId }
-                if (index != -1) {
-                    val mappedHistory = history.toUiMessages()
-                    val inferredKind = when {
-                        mappedHistory.any { it.showStudyPlanButton } -> ConversationKind.PLAN
-                        mappedHistory.any { it.showQuizButton } -> ConversationKind.QUIZ
-                        else -> ConversationKind.CHAT
+                withContext(Dispatchers.Main) {
+                    val index = _conversations.indexOfFirst { it.documentId == documentId }
+                    if (index != -1) {
+                        val mappedHistory = history.toUiMessages(_conversations[index].id)
+                        val inferredKind = when {
+                            mappedHistory.any { it.showStudyPlanButton } -> ConversationKind.PLAN
+                            mappedHistory.any { it.showQuizButton } -> ConversationKind.QUIZ
+                            else -> ConversationKind.CHAT
+                        }
+                        val updated = _conversations[index].copy(
+                            kind = inferredKind,
+                            isQuiz = inferredKind == ConversationKind.QUIZ,
+                            chatMessages = mappedHistory.toMutableList()
+                        )
+                        _conversations[index] = updated
+                        persistChatState()
                     }
-                    val updated = _conversations[index].copy(
-                        kind = inferredKind,
-                        isQuiz = inferredKind == ConversationKind.QUIZ,
-                        chatMessages = mappedHistory.toMutableList()
-                    )
-                    _conversations[index] = updated
-                    persistChatState()
                 }
             } catch (e: Exception) {
                 if (e is HttpException) handleHttpError(e)
@@ -580,41 +605,42 @@ class ChatViewModel : ViewModel() {
         persistChatState()
         isTyping = true
 
+        var currentId = convId
         try {
-            if (isQuizIntent(text)) {
-                logTurn(turnId, "persist_document_intent_quiz", convId)
-                val persisted = persistIntentTurnForDocument(documentId, text)
-                if (persisted == null) return
-                logTurn(turnId, "ai_reply_hidden_for_quiz", convId, "source=documents_chat")
-                handleQuizIntent(convId, text)
-                return
-            }
-
-            if (isPlanIntent(text)) {
-                logTurn(turnId, "persist_document_intent_plan", convId)
-                val persisted = persistIntentTurnForDocument(documentId, text)
-                if (persisted == null) return
-                if (persisted.answer.isNotBlank()) {
-                    appendAiMessage(convId, persisted.answer)
-                    persistChatState()
-                    logTurn(turnId, "ai_reply_appended", convId, "source=documents_chat")
-                }
-                handlePlanIntent(convId, text, documentId)
-                return
-            }
-
             logTurn(turnId, "persist_document_request", convId)
-            val response = RetrofitClient.instance.sendQuestion(documentId, DocumentChatRequest(text))
-            appendAiMessage(convId, response.answer)
+            val response = RetrofitClient.instance.sendQuestion(documentId, DocumentChatRequest(text, convId))
+            val resolvedConversationId = if (!response.conversationId.isNullOrBlank()) {
+                rebindConversationId(convId, response.conversationId)
+            } else {
+                convId
+            }
+            currentId = resolvedConversationId
+
+            appendAiMessage(
+                convId = resolvedConversationId,
+                text = response.answer,
+                messageId = response.messageId,
+                documentId = documentId,
+                artifactType = response.artifactType,
+                artifactJson = response.artifactData
+            )
+
+            if (response.artifactType == "QUIZ" && response.artifactData != null && !response.artifactData.isJsonNull) {
+                val questions = parseQuestionsFromJson(response.artifactData)
+                onQuizGenerated?.invoke(questions)
+            } else if (response.artifactType == "STUDY_PLAN" && response.artifactData != null && !response.artifactData.isJsonNull) {
+                onPlanGenerated?.invoke(response.artifactData.toString())
+            }
+
             persistChatState()
-            logTurn(turnId, "ai_reply_appended", convId, "source=documents_chat")
-            maybeAutoRenameConversation(convId, text, response.answer)
+            logTurn(turnId, "ai_reply_appended", resolvedConversationId, "source=documents_chat")
+            maybeAutoRenameConversation(resolvedConversationId, text, response.answer)
         } catch (e: HttpException) {
             handleHttpError(e)
-            logTurn(turnId, "turn_http_error", convId, "code=${e.code()}")
+            logTurn(turnId, "turn_http_error", currentId, "code=${e.code()}")
         } catch (e: Exception) {
             errorMessage = e.localizedMessage ?: "Failed to send message."
-            logTurn(turnId, "turn_error", convId, e.javaClass.simpleName)
+            logTurn(turnId, "turn_error", currentId, e.javaClass.simpleName)
         } finally {
             isTyping = false
         }
@@ -622,7 +648,8 @@ class ChatViewModel : ViewModel() {
 
     private suspend fun persistIntentTurnForDocument(documentId: String, userMessage: String): ChatResponse? {
         return try {
-            RetrofitClient.instance.sendQuestion(documentId, DocumentChatRequest(userMessage))
+            val conv = _conversations.firstOrNull { it.documentId == documentId }
+            RetrofitClient.instance.sendQuestion(documentId, DocumentChatRequest(userMessage, conv?.id))
         } catch (e: HttpException) {
             handleHttpError(e)
             null
@@ -707,18 +734,32 @@ class ChatViewModel : ViewModel() {
         text: String,
         messageId: String? = null,
         showFlashcardButton: Boolean = false,
-        documentId: String? = null
+        showMindMapButton: Boolean = false,
+        documentId: String? = null,
+        artifactType: String? = null,
+        artifactJson: JsonElement? = null
     ) {
         val index = _conversations.indexOfFirst { it.id == convId }
         if (index == -1) return
         val updatedConv = _conversations[index]
+
+        val isQuiz = artifactType == "QUIZ"
+        val isPlan = artifactType == "STUDY_PLAN"
+        val isFlash = showFlashcardButton || artifactType == "FLASHCARDS"
+        val isMindMap = showMindMapButton || artifactType == "MINDMAP"
+
         updatedConv.chatMessages.add(
             ChatMessage(
                 id = messageId ?: UUID.randomUUID().toString(),
                 text = text,
                 isUser = false,
-                showFlashcardButton = showFlashcardButton,
-                documentId = documentId,
+                showQuizButton = isQuiz,
+                showStudyPlanButton = isPlan,
+                showFlashcardButton = isFlash,
+                showMindMapButton = isMindMap,
+                documentId = documentId ?: updatedConv.documentId,
+                artifactType = artifactType,
+                artifactJson = artifactJson,
                 createdAt = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
             )
         )
@@ -815,6 +856,9 @@ class ChatViewModel : ViewModel() {
                 if (finalTitle.isNotBlank()) {
                     _conversations[index] = conversation.copy(title = finalTitle, autoTitleApplied = true)
                     persistChatState()
+                    runCatching {
+                        RetrofitClient.instance.renameConversation(convId, RenameConversationRequest(finalTitle))
+                    }
                 }
             } catch (_: Exception) {
                 _conversations[index] = conversation.copy(autoTitleApplied = true)
@@ -896,9 +940,10 @@ class ChatViewModel : ViewModel() {
                 "AI returned an empty response. Please try again."
             }
 
-            val lowerMsg = userMessage.lowercase()
-            val showQuiz = lowerMsg.contains("quiz")
-            val showPlan = lowerMsg.contains("plan")
+            val showQuiz = askResponse.artifactType == "QUIZ"
+            val showPlan = askResponse.artifactType == "STUDY_PLAN"
+            val showFlashcards = askResponse.artifactType == "FLASHCARDS"
+            val showMindMap = askResponse.artifactType == "MINDMAP"
 
             val resolvedIndex = _conversations.indexOfFirst { it.id == resolvedConversationId }
             if (resolvedIndex == -1) {
@@ -912,9 +957,22 @@ class ChatViewModel : ViewModel() {
                     text = aiResponse,
                     isUser = false,
                     showQuizButton = showQuiz,
-                    showStudyPlanButton = showPlan
+                    showStudyPlanButton = showPlan,
+                    showFlashcardButton = showFlashcards,
+                    showMindMapButton = showMindMap,
+                    artifactType = askResponse.artifactType,
+                    artifactJson = askResponse.artifactData,
+                    documentId = updatedConv.documentId
                 )
             )
+
+            if (askResponse.artifactType == "QUIZ" && askResponse.artifactData != null && !askResponse.artifactData.isJsonNull) {
+                val questions = parseQuestionsFromJson(askResponse.artifactData)
+                onQuizGenerated?.invoke(questions)
+            } else if (askResponse.artifactType == "STUDY_PLAN" && askResponse.artifactData != null && !askResponse.artifactData.isJsonNull) {
+                onPlanGenerated?.invoke(askResponse.artifactData.toString())
+            }
+
             _conversations[resolvedIndex] = updatedConv.copy(chatMessages = updatedConv.chatMessages.toMutableList())
             persistChatState()
             logTurn(turnId, "ai_reply_appended", resolvedConversationId, "source=chat_ask")
@@ -950,7 +1008,7 @@ class ChatViewModel : ViewModel() {
             onQuizGenerated?.invoke(quizQuestions)
             val quizTitle = generatedQuiz.title ?: "Quiz generated from chat"
             
-            // Create a JSON object for storage that includes the title
+            
             val storageJson = JsonObject().apply {
                 add("questions", Gson().toJsonTree(quizQuestions))
                 addProperty("quizTitle", quizTitle)
@@ -979,7 +1037,8 @@ class ChatViewModel : ViewModel() {
                         text = "Quiz is ready: $quizTitle",
                         isUser = false,
                         showQuizButton = true,
-                        specificTitle = quizTitle
+                        specificTitle = quizTitle,
+                        documentId = updatedConv.documentId
                     )
                 )
                 _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages.toMutableList())
@@ -1027,7 +1086,8 @@ class ChatViewModel : ViewModel() {
                         showStudyPlanButton = true,
                         planJson = planJson,
                         courses = courses,
-                        specificTitle = planTitle
+                        specificTitle = planTitle,
+                        documentId = updatedConv.documentId
                     )
                 )
                 _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages.toMutableList())
@@ -1134,6 +1194,39 @@ class ChatViewModel : ViewModel() {
         )
     }
 
+    fun generateQuizForDocument(documentId: String, onComplete: (String, List<QuizQuestion>) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val response = RetrofitClient.instance.generateQuiz(documentId)
+                val uiQuestions = response.questions.toUiQuizQuestions()
+                withContext(Dispatchers.Main) {
+                    onComplete(response.quizId, uiQuestions)
+                }
+            } catch (e: HttpException) {
+                handleHttpError(e)
+                withContext(Dispatchers.Main) {
+                    onComplete("", emptyList())
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to generate quiz for document $documentId", e)
+                withContext(Dispatchers.Main) {
+                    errorMessage = e.localizedMessage ?: "Failed to generate quiz."
+                    onComplete("", emptyList())
+                }
+            }
+        }
+    }
+
+    private fun parseQuestionsFromJson(json: JsonElement): List<QuizQuestion> {
+        return try {
+            val type = object : com.google.gson.reflect.TypeToken<List<ApiQuizQuestion>>() {}.type
+            val backendQuestions = Gson().fromJson<List<ApiQuizQuestion>>(json, type)
+            backendQuestions.toUiQuizQuestions()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
     private fun List<ApiQuizQuestion>.toUiQuizQuestions(): List<QuizQuestion> {
         return mapIndexed { idx, item ->
             val ordered = listOf("A", "B", "C", "D")
@@ -1232,9 +1325,7 @@ class ChatViewModel : ViewModel() {
         _currentChatType.value = ChatScreenType.CONTINUING_CHAT
         isTyping = false
         activeDocumentId = selected.documentId
-        if (selected.autoTitleApplied) {
-            refreshConversationMessages(id)
-        }
+        refreshConversationMessages(id)
         persistChatState()
     }
 
@@ -1242,39 +1333,41 @@ class ChatViewModel : ViewModel() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val messages = RetrofitClient.instance.getConversationMessages(conversationId)
-                val mappedHistory = messages.toBackendHistory().toUiMessages()
-                val index = _conversations.indexOfFirst { it.id == conversationId }
-                if (index != -1) {
-                    val inferredKind = when {
-                        mappedHistory.any { it.showStudyPlanButton } -> ConversationKind.PLAN
-                        mappedHistory.any { it.showQuizButton } -> ConversationKind.QUIZ
-                        else -> ConversationKind.CHAT
-                    }
-                    
-                    val messagesWithImages = mappedHistory.map { msg ->
-                        if (!msg.imageMimeType.isNullOrBlank() && msg.isUser) {
-                            val messageIdFromId = msg.id.removePrefix("hist-user-")
-                            try {
-                                val imageResponse = RetrofitClient.instance.getMessageImage(messageIdFromId)
-                                msg.copy(
-                                    imageBase64 = imageResponse.base64,
-                                    imageMimeType = imageResponse.mimeType,
-                                    imageOriginalName = imageResponse.originalName
-                                )
-                            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    val mappedHistory = messages.toBackendHistory().toUiMessages(conversationId)
+                    val index = _conversations.indexOfFirst { it.id == conversationId }
+                    if (index != -1) {
+                        val inferredKind = when {
+                            mappedHistory.any { it.showStudyPlanButton } -> ConversationKind.PLAN
+                            mappedHistory.any { it.showQuizButton } -> ConversationKind.QUIZ
+                            else -> ConversationKind.CHAT
+                        }
+
+                        val messagesWithImages = mappedHistory.map { msg ->
+                            if (!msg.imageMimeType.isNullOrBlank() && msg.isUser) {
+                                val messageIdFromId = msg.id.removePrefix("hist-user-")
+                                try {
+                                    val imageResponse = RetrofitClient.instance.getMessageImage(messageIdFromId)
+                                    msg.copy(
+                                        imageBase64 = imageResponse.base64,
+                                        imageMimeType = imageResponse.mimeType,
+                                        imageOriginalName = imageResponse.originalName
+                                    )
+                                } catch (e: Exception) {
+                                    msg
+                                }
+                            } else {
                                 msg
                             }
-                        } else {
-                            msg
                         }
+
+                        _conversations[index] = _conversations[index].copy(
+                            kind = inferredKind,
+                            isQuiz = inferredKind == ConversationKind.QUIZ,
+                            chatMessages = messagesWithImages.toMutableList()
+                        )
+                        persistChatState()
                     }
-                    
-                    _conversations[index] = _conversations[index].copy(
-                        kind = inferredKind,
-                        isQuiz = inferredKind == ConversationKind.QUIZ,
-                        chatMessages = messagesWithImages.toMutableList()
-                    )
-                    persistChatState()
                 }
             } catch (e: Exception) {
                 if (e is HttpException) {
@@ -1300,7 +1393,9 @@ class ChatViewModel : ViewModel() {
             try {
                 if (RetrofitClient.authToken.isNullOrBlank()) return@launch
                 val convInfos = RetrofitClient.instance.getConversations()
-                val existingMessagesByConversationId = _conversations.associate { it.id to it.chatMessages.toMutableList() }
+                val backendConversationIds = convInfos.map { it.id }.toSet()
+                val localConversations = _conversations.toList()
+                val existingMessagesByConversationId = localConversations.associate { it.id to it.chatMessages.toMutableList() }
                 val conversations = convInfos.map { info ->
                     Conversation(
                         id = info.id,
@@ -1312,8 +1407,12 @@ class ChatViewModel : ViewModel() {
                         chatMessages = (existingMessagesByConversationId[info.id] ?: emptyList()).toMutableList()
                     )
                 }
+                val pendingLocalConversations = localConversations.filter { conversation ->
+                    conversation.id !in backendConversationIds &&
+                        (conversation.documentId != null || conversation.title.isBlank() || !conversation.autoTitleApplied)
+                }
                 _conversations.clear()
-                _conversations.addAll(conversations)
+                _conversations.addAll(conversations + pendingLocalConversations)
 
                 if (openedFromFreshLogin) {
                     activeConversationId = ""
@@ -1341,7 +1440,7 @@ class ChatViewModel : ViewModel() {
                     _currentChatType.value = ChatScreenType.CONTINUING_CHAT
                 }
 
-                if (activeConversationId.isNotBlank()) {
+                if (activeConversationId.isNotBlank() && activeConversationId in backendConversationIds) {
                     refreshConversationMessages(activeConversationId)
                 }
 
@@ -1370,6 +1469,14 @@ class ChatViewModel : ViewModel() {
         if (index != -1 && newTitle.isNotBlank()) {
             _conversations[index] = _conversations[index].copy(title = newTitle, autoTitleApplied = true)
             persistChatState()
+            
+            viewModelScope.launch {
+                try {
+                    RetrofitClient.instance.renameConversation(id, RenameConversationRequest(newTitle))
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to sync conversation rename to backend", e)
+                }
+            }
         }
     }
     fun deleteConversation(id: String) {
@@ -1724,11 +1831,39 @@ class ChatViewModel : ViewModel() {
         return convId
     }
 
-    private fun List<BackendChatMessage>.toUiMessages(): List<ChatMessage> {
+    private fun List<BackendChatMessage>.toUiMessages(targetConversationId: String? = null): List<ChatMessage> {
         val messages = mutableListOf<ChatMessage>()
+        val convIdToUse = targetConversationId ?: activeConversationId
+        val docIdToUse = _conversations.find { it.id == convIdToUse }?.documentId
+
+        // Deduplicate ARTIFACT messages: keep only the LAST artifact of each artifactType.
+        // The backend creates multiple ARTIFACT rows for the same quiz/plan (e.g. from
+        // generateQuiz, saveFeQuiz, generateMoreQuestions, saveDocumentArtifact, inline chat).
+        // Without dedup all of them show as separate chat bubbles after reload.
+        val lastArtifactIdByType = mutableMapOf<String, String>()
+        for (item in this) {
+            val mt = item.messageType.orEmpty().trim().uppercase()
+            val at = item.artifactType.orEmpty().trim().uppercase()
+            if (mt == "ARTIFACT" && at.isNotBlank()) {
+                lastArtifactIdByType[at] = item.id
+            }
+        }
+        val suppressedArtifactIds = mutableSetOf<String>()
+        for (item in this) {
+            val mt = item.messageType.orEmpty().trim().uppercase()
+            val at = item.artifactType.orEmpty().trim().uppercase()
+            if (mt == "ARTIFACT" && at.isNotBlank() && lastArtifactIdByType[at] != item.id) {
+                suppressedArtifactIds.add(item.id)
+            }
+        }
+
         forEach { item ->
             val messageType = item.messageType.orEmpty().trim().uppercase()
             val artifactType = item.artifactType.orEmpty().trim().uppercase()
+
+            if (messageType == "ARTIFACT" && suppressedArtifactIds.contains(item.id)) {
+                return@forEach // skip duplicate artifact
+            }
 
             if (messageType == "ARTIFACT") {
                 val label = item.messageLabel
@@ -1752,6 +1887,9 @@ class ChatViewModel : ViewModel() {
                             specificTitle = specificTitle,
                             messageType = messageType,
                             artifactType = artifactType,
+                            artifactJson = item.artifactJson,
+                            planJson = item.artifactJson?.toString(),
+                            documentId = docIdToUse,
                             createdAt = item.createdAt
                         )
                     )
@@ -1765,6 +1903,24 @@ class ChatViewModel : ViewModel() {
                             specificTitle = specificTitle,
                             messageType = messageType,
                             artifactType = artifactType,
+                            artifactJson = item.artifactJson,
+                            planJson = item.artifactJson?.toString(),
+                            documentId = docIdToUse,
+                            createdAt = item.createdAt
+                        )
+                    )
+                    "MIND_MAP" -> messages.add(
+                        ChatMessage(
+                            id = "hist-artifact-mindmap-${item.id}",
+                            text = label ?: "Mind Map is ready. Tap View Mind Map to explore.",
+                            isUser = false,
+                            showMindMapButton = true,
+                            documentId = docIdToUse,
+                            messageLabel = label,
+                            specificTitle = specificTitle,
+                            messageType = messageType,
+                            artifactType = artifactType,
+                            artifactJson = item.artifactJson,
                             createdAt = item.createdAt
                         )
                     )
@@ -1779,13 +1935,15 @@ class ChatViewModel : ViewModel() {
                         isUser = true,
                         imageMimeType = item.imageMimeType,
                         imageOriginalName = item.imageOriginalName,
+                        attachmentName = item.attachmentName,
+                        documentId = docIdToUse,
                         createdAt = item.createdAt
                     )
                 )
             }
             if (item.answer.isNotBlank()) {
                 val answerText = item.answer.trim()
-                // Chỉ hiện nút quiz từ văn bản nếu CHƯA có artifact quiz trong cùng một lượt xử lý message này
+                
                 val hasAlreadyAddedQuiz = messages.any { it.showQuizButton && it.id.contains(item.id) }
                 
                 if (looksLikeGeneratedQuizAnswer(answerText) && !hasAlreadyAddedQuiz) {
@@ -1795,6 +1953,7 @@ class ChatViewModel : ViewModel() {
                             text = "Quiz is ready. Tap Start Quiz to begin.",
                             isUser = false,
                             showQuizButton = true,
+                            documentId = docIdToUse,
                             createdAt = item.createdAt
                         )
                     )
@@ -1804,8 +1963,8 @@ class ChatViewModel : ViewModel() {
                             id = "hist-ai-${item.id}",
                             text = answerText,
                             isUser = false,
-                            showFlashcardButton = _conversations.find { it.id == activeConversationId }?.documentId != null,
-                            documentId = _conversations.find { it.id == activeConversationId }?.documentId,
+                            showFlashcardButton = docIdToUse != null,
+                            documentId = docIdToUse,
                             createdAt = item.createdAt
                         )
                     )
@@ -1836,7 +1995,8 @@ class ChatViewModel : ViewModel() {
                 artifactType = item.artifactType,
                 artifactJson = item.artifactJson,
                 imageMimeType = item.imageMimeType,
-                imageOriginalName = item.imageOriginalName
+                imageOriginalName = item.imageOriginalName,
+                attachmentName = item.attachmentName
             )
         }
     }
@@ -1963,6 +2123,11 @@ class ChatViewModel : ViewModel() {
         successMessage = null
     }
 
+    fun consumeErrorMessage() {
+        errorMessage = null
+    }
+
+
     private fun hashAccountIdentity(accountIdentifier: String): String {
         return try {
             val digest = java.security.MessageDigest.getInstance("SHA-256")
@@ -1993,3 +2158,4 @@ data class ConversationStudyPlanItem(
     val createdAt: String?
 )
 
+ 

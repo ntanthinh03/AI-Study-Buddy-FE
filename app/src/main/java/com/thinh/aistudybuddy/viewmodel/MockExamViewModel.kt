@@ -3,7 +3,7 @@ package com.thinh.aistudybuddy.viewmodel
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.thinh.aistudybuddy.data.network.RetrofitClient
+import com.thinh.aistudybuddy.services.network.RetrofitClient
 import com.thinh.aistudybuddy.data.models.*
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -43,7 +43,7 @@ class MockExamViewModel : ViewModel() {
                 val docs = api.getDocuments()
                 _documents.value = docs.sortedByDescending { it.createdAt ?: "" }
             } catch (e: Exception) {
-                // Silently fail for docs loading
+                
             } finally {
                 _isLoadingDocs.value = false
             }

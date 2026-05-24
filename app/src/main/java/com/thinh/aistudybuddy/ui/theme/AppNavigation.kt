@@ -13,8 +13,8 @@ import androidx.navigation.compose.composable
 import com.thinh.aistudybuddy.data.local.LocalHistoryStore
 import com.thinh.aistudybuddy.data.local.SessionStore
 import com.thinh.aistudybuddy.data.local.TokenDataStore
-import com.thinh.aistudybuddy.data.network.RetrofitClient
-import com.thinh.aistudybuddy.ui.theme.screens.*
+import com.thinh.aistudybuddy.services.network.RetrofitClient
+import com.thinh.aistudybuddy.ui.pages.*
 import com.thinh.aistudybuddy.viewmodel.*
 import com.thinh.aistudybuddy.data.models.*
 import com.google.gson.Gson
@@ -33,6 +33,7 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
     val analyticsViewModel: AnalyticsViewModel = viewModel()
     val focusViewModel: FocusViewModel = viewModel()
     val leaderboardViewModel: LeaderboardViewModel = viewModel()
+    val mindMapViewModel: MindMapViewModel = viewModel(factory = ViewModelFactory(RetrofitClient.instance))
     var selectedLessonId by remember { mutableStateOf<String?>(null) }
     var displayName by remember { mutableStateOf(initialDisplayName) }
     var inboxBootstrapped by remember { mutableStateOf(false) }
@@ -57,8 +58,7 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
     ) {
         composable("welcome") {
             WelcomeScreen(onFinished = {
-                val destination = if (RetrofitClient.authToken.isNullOrBlank()) "login" else "chat"
-                navController.navigate(destination) { popUpTo("welcome") { inclusive = true } }
+                navController.navigate("login") { popUpTo("welcome") { inclusive = true } }
             })
         }
         composable("login") {
@@ -75,8 +75,7 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
                     }
                 },
                 onRegisterClick = { navController.navigate("register") },
-                onForgotPasswordClick = { navController.navigate("forgot_password") },
-                onBackClick = { navController.navigate("welcome") }
+                onForgotPasswordClick = { navController.navigate("forgot_password") }
             )
         }
         composable("register") {
@@ -156,7 +155,23 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
                 quizViewModel = quizViewModel,
                 studyPlanViewModel = studyViewModel,
                 onProfileClick = { navController.navigate("account") },
-                onStartQuiz = { navController.navigate("quiz") },
+                onStartQuiz = { message: ChatMessage ->
+                    val quizJson = message.artifactJson?.toString() ?: message.planJson
+                    if (!quizJson.isNullOrBlank()) {
+                        val questions = parseQuizFromJson(quizJson)
+                        if (questions.isNotEmpty()) {
+                            quizViewModel.loadQuestions(
+                                newQuestions = questions,
+                                title = "Quiz: ${message.attachmentName ?: "Chat"}",
+                                documentId = message.documentId
+                            )
+                            navController.navigate("quiz")
+                        }
+                    } else if (!message.documentId.isNullOrBlank()) {
+                        quizViewModel.generateQuizForDocument(message.documentId)
+                        navController.navigate("quiz")
+                    }
+                },
                 onAccountClick = { navController.navigate("account") },
                 onSettingsClick = { navController.navigate("settings") },
                 onFlashcardsClick = { navController.navigate("flashcards") },
@@ -177,6 +192,17 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
                 },
                 onMockExamClick = { navController.navigate("mock_exam") },
                 onStudyRoomClick = { navController.navigate("study_room") },
+                onVersusArenaClick = { navController.navigate("versus_dashboard") },
+                onMindMapClick = { docId, docName ->
+                    mindMapViewModel.resetState()
+                    
+                    
+                    val summary = chatViewModel.activeMessages.findLast { it.documentId == docId && it.text.length > 50 }?.text ?: "Generate mind map for this document."
+                    mindMapViewModel.generateMindMap(docId, summary) {
+                        
+                    }
+                    navController.navigate("mind_map/$docId/$docName")
+                },
                 onConversationHistoryClick = { conversationId: String -> navController.navigate("conversation_history/$conversationId") },
                 onSessionExpired = forceLogin,
                 flashcardViewModel = flashcardViewModel,
@@ -236,7 +262,7 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
             QuizScreen(viewModel = quizViewModel, onCloseClick = { navController.popBackStack() })
         }
         composable("mock_exam") {
-            com.thinh.aistudybuddy.ui.theme.screens.MockExamScreen(
+            com.thinh.aistudybuddy.ui.pages.MockExamScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }
@@ -258,7 +284,8 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
             MindMapScreen(
                 documentId = documentId,
                 documentName = documentName,
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                viewModel = mindMapViewModel
             )
         }
         composable("settings") { SettingsScreen(onBack = { navController.popBackStack() }) }
@@ -285,23 +312,29 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
                     }
                     navController.navigate("lesson_learn")
                 },
+                onOpenMindMap = { docId ->
+                    val docName = chatViewModel.conversations.find { it.documentId == docId }?.title ?: "Document"
+                    navController.navigate("mind_map/$docId/$docName")
+                },
                 timelineStatusByDocumentId = studyViewModel.timeline.associate { it.documentId to it.status },
                 onRefresh = { conversationId: String ->
                     chatViewModel.refreshConversationMessages(conversationId)
                     studyViewModel.refreshProgressTimeline()
                 },
                 onStartQuiz = { message: ChatMessage ->
-                    val quizJson = message.planJson
+                    val quizJson = message.artifactJson?.toString() ?: message.planJson
                     if (!quizJson.isNullOrBlank()) {
-                        val questions = parseQuizFromJson(quizJson!!)
+                        val questions = parseQuizFromJson(quizJson)
                         if (questions.isNotEmpty()) {
                             quizViewModel.loadQuestions(
                                 newQuestions = questions,
-                                title = "Quiz: ${message.attachmentName ?: "History"}"
+                                title = "Quiz: ${message.attachmentName ?: "History"}",
+                                documentId = message.documentId
                             )
                             navController.navigate("quiz")
                         }
-                    } else if (message.showQuizButton) {
+                    } else if (!message.documentId.isNullOrBlank()) {
+                        quizViewModel.generateQuizForDocument(message.documentId)
                         navController.navigate("quiz")
                     }
                 },
@@ -312,7 +345,8 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
                         navController.navigate("study_plan")
                     }
                 },
-                chatViewModel = chatViewModel
+                chatViewModel = chatViewModel,
+                mindMapViewModel = mindMapViewModel
             )
         }
         composable("account") {
@@ -332,6 +366,21 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
         }
         composable("flashcards") {
             FlashcardScreen(
+                onBackClick = { navController.popBackStack() },
+                onStartStudy = { docId ->
+                    flashcardViewModel.focusDocument(docId.takeIf { it != "all" })
+                    navController.navigate("flashcard_review/$docId")
+                },
+                viewModel = flashcardViewModel
+            )
+        }
+        composable(
+            route = "flashcard_review/{documentId}",
+            arguments = listOf(navArgument("documentId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val documentId = backStackEntry.arguments?.getString("documentId") ?: "all"
+            FlashcardReviewScreen(
+                documentId = documentId,
                 onBackClick = { navController.popBackStack() },
                 viewModel = flashcardViewModel
             )
@@ -361,51 +410,160 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
                 viewModel = leaderboardViewModel
             )
         }
+        composable("versus_dashboard") {
+            VersusDashboardScreen(
+                onBack = {
+                    navController.navigate("chat") {
+                        popUpTo(navController.graph.findStartDestination().id) { inclusive = true }
+                    }
+                },
+                onStartBattle = { navController.navigate("versus_matchmaking") },
+                onReviewMatch = { matchId ->
+                    navController.navigate("versus_review/$matchId")
+                }
+            )
+        }
+        composable(
+            route = "versus_matchmaking?documentId={documentId}",
+            arguments = listOf(navArgument("documentId") {
+                type = NavType.StringType
+                nullable = true
+                defaultValue = null
+            })
+        ) { backStackEntry ->
+            val docId = backStackEntry.arguments?.getString("documentId")
+            VersusMatchmakingScreen(
+                initialDocumentId = docId,
+                onBack = { navController.popBackStack() },
+                onMatchFound = { matchId, isGuest ->
+                    navController.navigate("versus_countdown/$matchId?isGuest=$isGuest") {
+                        popUpTo("versus_matchmaking") { inclusive = true }
+                    }
+                }
+            )
+        }
+        composable(
+            route = "versus_countdown/{matchId}?isGuest={isGuest}",
+            arguments = listOf(
+                navArgument("matchId") { type = NavType.StringType },
+                navArgument("isGuest") { type = NavType.BoolType; defaultValue = false }
+            )
+        ) { backStackEntry ->
+            val matchId = backStackEntry.arguments?.getString("matchId").orEmpty()
+            val isGuest = backStackEntry.arguments?.getBoolean("isGuest") ?: false
+            VersusCountdownScreen(
+                matchId = matchId,
+                onFinished = { mId ->
+                    navController.navigate("versus_arena/$mId?isGuest=$isGuest") {
+                        popUpTo("versus_countdown/$mId?isGuest=$isGuest") { inclusive = true }
+                    }
+                }
+            )
+        }
+        composable(
+            route = "versus_arena/{matchId}?isGuest={isGuest}",
+            arguments = listOf(
+                navArgument("matchId") { type = NavType.StringType },
+                navArgument("isGuest") { type = NavType.BoolType; defaultValue = false }
+            )
+        ) { backStackEntry ->
+            val matchId = backStackEntry.arguments?.getString("matchId").orEmpty()
+            val isGuest = backStackEntry.arguments?.getBoolean("isGuest") ?: false
+            VersusArenaScreen(
+                matchId = matchId,
+                isGuest = isGuest,
+                onGameFinished = { mId ->
+                    if (mId == "QUIT") {
+                        navController.navigate("versus_dashboard") {
+                            popUpTo(navController.graph.findStartDestination().id) { inclusive = true }
+                        }
+                    } else {
+                        navController.navigate("versus_review/$mId") {
+                            popUpTo("versus_arena/$mId?isGuest=$isGuest") { inclusive = true }
+                        }
+                    }
+                }
+            )
+        }
+        composable(
+            route = "versus_review/{matchId}",
+            arguments = listOf(navArgument("matchId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val matchId = backStackEntry.arguments?.getString("matchId").orEmpty()
+            VersusReviewScreen(
+                matchId = matchId,
+                onReturnHome = {
+                    navController.navigate("versus_dashboard") {
+                        popUpTo(navController.graph.findStartDestination().id) { inclusive = true }
+                    }
+                }
+            )
+        }
     }
 }
 
 private fun parseQuizFromJson(json: String): List<QuizQuestion> {
     return try {
-        val gson = Gson()
-        val rootMap = gson.fromJson(json, Map::class.java)
-        val questionsList = (rootMap["questions"] ?: rootMap["quiz"]) as? List<Map<String, Any>> ?: (if (json.trim().startsWith("[")) gson.fromJson(json, List::class.java) as? List<Map<String, Any>> else null) ?: return emptyList()
+        val root = JsonParser().parse(json)
+        val questionsArray = when (root) {
+            is JsonArray -> root
+            is JsonObject -> root.getAsJsonArray("questions") ?: root.getAsJsonArray("quiz")
+            else -> null
+        } ?: return emptyList()
 
-        val parsedQuestions = mutableListOf<QuizQuestion>()
-        for (idx in questionsList.indices) {
-            val item = questionsList[idx]
-            
-            val questionText = (item["text"] ?: item["question"])?.toString() ?: continue
-            
-            val optionsRaw = item["options"] as? List<*>
-            val optionsList = optionsRaw?.mapNotNull { it?.toString() }.orEmpty()
-            if (optionsList.size != 4) continue
-            
-            val answerRaw = item["answer"]?.toString() ?: "A"
-            val answerIndex = when (answerRaw.trim().uppercase()) {
-                "A" -> 0
-                "B" -> 1
-                "C" -> 2
-                "D" -> 3
-                else -> {
-                    val found = optionsList.indexOfFirst { it.equals(answerRaw, ignoreCase = true) }
-                    if (found >= 0) found else 0
-                }
+        questionsArray.mapIndexedNotNull { idx, element ->
+            val item = element.asJsonObject ?: return@mapIndexedNotNull null
+            val questionText = item.get("text")?.asStringOrNull() ?: item.get("question")?.asStringOrNull() ?: return@mapIndexedNotNull null
+
+            val optionsRaw = item.get("options")
+            val optionsList = when {
+                optionsRaw == null || optionsRaw.isJsonNull -> emptyList()
+                optionsRaw.isJsonArray -> optionsRaw.asJsonArray.mapNotNull { it.asStringOrNull() }
+                optionsRaw.isJsonObject -> listOf("A", "B", "C", "D")
+                    .mapNotNull { key -> optionsRaw.asJsonObject.get(key)?.asStringOrNull() }
+                else -> emptyList()
+            }.take(4)
+            if (optionsList.size != 4) return@mapIndexedNotNull null
+
+            val answerIndex = when {
+                item.has("correctAnswerIndex") -> item.get("correctAnswerIndex").takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt?.coerceIn(0, 3) ?: 0
+                else -> orderedAnswerIndex(
+                    item.get("answer")?.asStringOrNull()
+                        ?: item.get("correctAnswer")?.asStringOrNull()
+                        ?: item.get("correct")?.asStringOrNull()
+                        ?: "A",
+                    optionsList
+                )
             }
 
-            parsedQuestions.add(
-                QuizQuestion(
-                    id = item["id"]?.toString() ?: "hist-$idx",
-                    question = questionText,
-                    options = optionsList,
-                    correctAnswerIndex = answerIndex,
-                    hint = item["hint"]?.toString() ?: "Choose the best answer.",
-                    explanation = item["explanation"]?.toString() ?: ""
-                )
+            QuizQuestion(
+                id = item.get("id")?.asStringOrNull() ?: "hist-$idx",
+                question = questionText,
+                options = optionsList,
+                correctAnswerIndex = answerIndex,
+                hint = item.get("hint")?.asStringOrNull() ?: "Choose the best answer.",
+                explanation = item.get("explanation")?.asStringOrNull() ?: ""
             )
         }
-        parsedQuestions
     } catch (e: Exception) {
         android.util.Log.e("AppNavigation", "Failed to parse quiz JSON", e)
         emptyList()
     }
+}
+
+private fun JsonElement.asStringOrNull(): String? =
+    if (isJsonNull) null else runCatching { asString }.getOrNull()
+
+private fun orderedAnswerIndex(answerRaw: String, options: List<String>): Int {
+    val normalized = answerRaw.trim()
+    val byLetter = when (normalized.uppercase()) {
+        "A" -> 0
+        "B" -> 1
+        "C" -> 2
+        "D" -> 3
+        else -> -1
+    }
+    if (byLetter in 0..3) return byLetter
+    val byValue = options.indexOfFirst { it.equals(normalized, ignoreCase = true) }
+    return if (byValue >= 0) byValue else 0
 }

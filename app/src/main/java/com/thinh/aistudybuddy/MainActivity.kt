@@ -12,7 +12,7 @@ import com.thinh.aistudybuddy.data.local.LocalHistoryStore
 import com.thinh.aistudybuddy.data.local.NetworkConfigStore
 import com.thinh.aistudybuddy.data.local.SessionStore
 import com.thinh.aistudybuddy.data.local.TokenDataStore
-import com.thinh.aistudybuddy.data.network.RetrofitClient
+import com.thinh.aistudybuddy.services.network.RetrofitClient
 import com.thinh.aistudybuddy.ui.theme.AppNavigation
 import com.thinh.aistudybuddy.ui.theme.FEBuddyTheme
 

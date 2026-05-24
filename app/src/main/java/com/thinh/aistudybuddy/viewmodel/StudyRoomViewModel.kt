@@ -4,7 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.gson.Gson
-import com.thinh.aistudybuddy.data.network.RetrofitClient
+import com.thinh.aistudybuddy.services.network.RetrofitClient
 import com.thinh.aistudybuddy.data.models.*
 import io.socket.client.IO
 import io.socket.client.Socket
@@ -20,7 +20,7 @@ data class PlayerRanking(val username: String, val score: Int)
 
 sealed class StudyRoomUiState {
     object Initial : StudyRoomUiState()
-    data class InLobby(val roomCode: String, val participants: List<String>) : StudyRoomUiState()
+    data class InLobby(val roomCode: String, val participants: List<String>, val isHost: Boolean = false) : StudyRoomUiState()
     data class SelectingMaterial(val roomCode: String) : StudyRoomUiState()
     data class WaitingForHost(val roomCode: String, val message: String) : StudyRoomUiState()
     data class FocusActive(val roomCode: String, val durationMinutes: Int, val startedBy: String) : StudyRoomUiState()
@@ -29,6 +29,10 @@ sealed class StudyRoomUiState {
         val questions: List<QuizQuestion>,
         val currentIndex: Int,
         val rankings: List<PlayerRanking>,
+        val endsAt: Long = 0,
+        val answeredCount: Int = 0,
+        val totalPlayers: Int = 0,
+        val isHost: Boolean = false,
         val isGeneratingRemaining: Boolean = false
     ) : StudyRoomUiState()
     data class Error(val message: String) : StudyRoomUiState()
@@ -78,7 +82,7 @@ class StudyRoomViewModel : ViewModel() {
                 val username = data.getString("username")
                 _messages.value = _messages.value + "$username joined the room"
                 
-                // Update participants list if in lobby
+                
                 val current = _uiState.value
                 if (current is StudyRoomUiState.InLobby) {
                     val newList = (current.participants + username).distinct()
@@ -107,6 +111,8 @@ class StudyRoomViewModel : ViewModel() {
                 val current = _uiState.value
                 if (current is StudyRoomUiState.WaitingForHost) {
                     _uiState.value = current.copy(message = "Host selected: $fileName\nPreparing questions...")
+                } else if (current is StudyRoomUiState.InLobby && !current.isHost) {
+                    _uiState.value = StudyRoomUiState.WaitingForHost(current.roomCode, "Host selected: $fileName\nPreparing questions...")
                 }
             }
 
@@ -115,21 +121,45 @@ class StudyRoomViewModel : ViewModel() {
                 val data = args[0] as JSONObject
                 val roomCode = data.optString("roomCode", "")
                 val questionsJson = data.getJSONArray("questions")
+                val endsAt = data.optLong("endsAt", 0)
                 val questions = parseQuestions(questionsJson)
                 
-                _uiState.value = StudyRoomUiState.QuizActive(roomCode, questions, 0, emptyList(), isGeneratingRemaining = true)
+                val current = _uiState.value
+                val isHost = if (current is StudyRoomUiState.InLobby) current.isHost 
+                             else if (current is StudyRoomUiState.SelectingMaterial) true
+                             else false
+
+                _uiState.value = StudyRoomUiState.QuizActive(
+                    roomCode, questions, 0, emptyList(), 
+                    endsAt = endsAt, isHost = isHost, isGeneratingRemaining = true
+                )
             }
 
             socket?.on("questionsUpdated") { args ->
-                // Notified that more questions are ready (handled by startQuiz flow mostly)
+                
             }
 
             socket?.on("newQuestion") { args ->
                 val data = args[0] as JSONObject
                 val nextIndex = data.getInt("index")
+                val endsAt = data.optLong("endsAt", 0)
                 val current = _uiState.value
                 if (current is StudyRoomUiState.QuizActive) {
-                    _uiState.value = current.copy(currentIndex = nextIndex)
+                    _uiState.value = current.copy(
+                        currentIndex = nextIndex, 
+                        endsAt = endsAt,
+                        answeredCount = 0
+                    )
+                }
+            }
+
+            socket?.on("answerProgress") { args ->
+                val data = args[0] as JSONObject
+                val answered = data.getInt("answeredCount")
+                val total = data.getInt("totalCount")
+                val current = _uiState.value
+                if (current is StudyRoomUiState.QuizActive) {
+                    _uiState.value = current.copy(answeredCount = answered, totalPlayers = total)
                 }
             }
 
@@ -196,8 +226,23 @@ class StudyRoomViewModel : ViewModel() {
         val data = JSONObject()
         data.put("roomCode", roomCode)
         data.put("username", username)
-        socket?.emit("joinRoom", data)
-        _uiState.value = StudyRoomUiState.InLobby(roomCode, listOf(username))
+        
+        socket?.emit("joinRoom", data, object : io.socket.client.Ack {
+            override fun call(vararg args: Any?) {
+                if (args != null && args.isNotEmpty()) {
+                    val response = args[0] as JSONObject
+                    val isHost = response.optBoolean("isHost", false)
+                    _uiState.value = StudyRoomUiState.InLobby(roomCode, listOf(username), isHost = isHost)
+                }
+            }
+        })
+    }
+
+    fun requestStartFocus(roomCode: String, durationMinutes: Int) {
+        val data = JSONObject()
+        data.put("roomCode", roomCode)
+        data.put("durationMinutes", durationMinutes)
+        socket?.emit("startFocus", data)
     }
 
     fun requestQuizSelection(roomCode: String) {
@@ -220,34 +265,34 @@ class StudyRoomViewModel : ViewModel() {
         socket?.emit("materialSelected", data)
         
         _isPreparingQuiz.value = true
-        // Start background generation
+        
         generateAndStartQuiz(roomCode, document.id)
     }
 
     private fun generateAndStartQuiz(roomCode: String, documentId: String) {
         viewModelScope.launch {
             try {
-                // Đợt 1: 5 câu đầu tiên (0-25%) - Khởi động trò chơi ngay
+                
                 val response1 = api.generateMockExam(MockExamRequest(questionCount = 5, documentId = documentId))
                 if (response1.isSuccessful && response1.body() != null) {
                     val questions1 = response1.body()!!.content.quizQuestions
                     emitStartQuiz(roomCode, questions1)
 
-                    // Các đợt tiếp theo chạy ngầm để lấp đầy 20 câu
+                    
                     launch {
-                        // Đợt 2: 5 câu tiếp theo (25-50%)
+                        
                         val response2 = api.generateMockExam(MockExamRequest(questionCount = 5, documentId = documentId))
                         if (response2.isSuccessful && response2.body() != null) {
                             emitAddQuestions(roomCode, response2.body()!!.content.quizQuestions)
                         }
 
-                        // Đợt 3: 5 câu tiếp theo (50-75%)
+                        
                         val response3 = api.generateMockExam(MockExamRequest(questionCount = 5, documentId = documentId))
                         if (response3.isSuccessful && response3.body() != null) {
                             emitAddQuestions(roomCode, response3.body()!!.content.quizQuestions)
                         }
 
-                        // Đợt 4: 5 câu cuối (75-100%)
+                        
                         val response4 = api.generateMockExam(MockExamRequest(questionCount = 5, documentId = documentId))
                         if (response4.isSuccessful && response4.body() != null) {
                             emitAddQuestions(roomCode, response4.body()!!.content.quizQuestions)

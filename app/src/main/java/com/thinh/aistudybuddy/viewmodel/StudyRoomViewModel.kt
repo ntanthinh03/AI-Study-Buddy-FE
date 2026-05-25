@@ -35,6 +35,13 @@ sealed class StudyRoomUiState {
         val isHost: Boolean = false,
         val isGeneratingRemaining: Boolean = false
     ) : StudyRoomUiState()
+    data class QuizSummary(
+        val roomCode: String,
+        val questions: List<QuizQuestion>,
+        val rankings: List<PlayerRanking>,
+        val userAnswers: Map<Int, String>,
+        val isHost: Boolean = false
+    ) : StudyRoomUiState()
     data class Error(val message: String) : StudyRoomUiState()
 }
 
@@ -58,6 +65,8 @@ class StudyRoomViewModel : ViewModel() {
     val isPreparingQuiz: StateFlow<Boolean> = _isPreparingQuiz.asStateFlow()
 
     private var myUsername: String = ""
+    private val roomParticipants = mutableListOf<String>()
+    private val userAnswers = mutableMapOf<Int, String>()
 
     init {
         setupSocket()
@@ -82,11 +91,44 @@ class StudyRoomViewModel : ViewModel() {
                 val username = data.getString("username")
                 _messages.value = _messages.value + "$username joined the room"
                 
+                val partJson = data.optJSONArray("participants")
+                val participants = mutableListOf<String>()
+                if (partJson != null) {
+                    for (i in 0 until partJson.length()) {
+                        participants.add(partJson.getString(i))
+                    }
+                } else {
+                    participants.add(username)
+                }
+                
+                roomParticipants.clear()
+                roomParticipants.addAll(participants)
                 
                 val current = _uiState.value
                 if (current is StudyRoomUiState.InLobby) {
-                    val newList = (current.participants + username).distinct()
-                    _uiState.value = current.copy(participants = newList)
+                    _uiState.value = current.copy(participants = participants)
+                }
+            }
+
+            socket?.on("userLeft") { args ->
+                val data = args[0] as JSONObject
+                val username = data.getString("username")
+                _messages.value = _messages.value + "$username left the room"
+                
+                val partJson = data.optJSONArray("participants")
+                val participants = mutableListOf<String>()
+                if (partJson != null) {
+                    for (i in 0 until partJson.length()) {
+                        participants.add(partJson.getString(i))
+                    }
+                }
+                
+                roomParticipants.clear()
+                roomParticipants.addAll(participants)
+                
+                val current = _uiState.value
+                if (current is StudyRoomUiState.InLobby) {
+                    _uiState.value = current.copy(participants = participants)
                 }
             }
 
@@ -128,6 +170,8 @@ class StudyRoomViewModel : ViewModel() {
                 val isHost = if (current is StudyRoomUiState.InLobby) current.isHost 
                              else if (current is StudyRoomUiState.SelectingMaterial) true
                              else false
+
+                userAnswers.clear()
 
                 _uiState.value = StudyRoomUiState.QuizActive(
                     roomCode, questions, 0, emptyList(), 
@@ -177,8 +221,28 @@ class StudyRoomViewModel : ViewModel() {
             }
 
             socket?.on("quizEnded") { args ->
-                _uiState.value = StudyRoomUiState.Initial
-                _messages.value = _messages.value + "Quiz ended"
+                val data = args[0] as JSONObject
+                val rankJson = data.optJSONArray("finalRankings")
+                val rankings = mutableListOf<PlayerRanking>()
+                if (rankJson != null) {
+                    for (i in 0 until rankJson.length()) {
+                        val obj = rankJson.getJSONObject(i)
+                        rankings.add(PlayerRanking(obj.getString("username"), obj.getInt("score")))
+                    }
+                }
+                
+                val current = _uiState.value
+                if (current is StudyRoomUiState.QuizActive) {
+                    _uiState.value = StudyRoomUiState.QuizSummary(
+                        roomCode = current.roomCode,
+                        questions = current.questions,
+                        rankings = rankings,
+                        userAnswers = HashMap(userAnswers),
+                        isHost = current.isHost
+                    )
+                } else {
+                    _uiState.value = StudyRoomUiState.Initial
+                }
             }
 
             socket?.connect()
@@ -232,7 +296,20 @@ class StudyRoomViewModel : ViewModel() {
                 if (args != null && args.isNotEmpty()) {
                     val response = args[0] as JSONObject
                     val isHost = response.optBoolean("isHost", false)
-                    _uiState.value = StudyRoomUiState.InLobby(roomCode, listOf(username), isHost = isHost)
+                    val partJson = response.optJSONArray("participants")
+                    val participants = mutableListOf<String>()
+                    if (partJson != null) {
+                        for (i in 0 until partJson.length()) {
+                            participants.add(partJson.getString(i))
+                        }
+                    } else {
+                        participants.add(username)
+                    }
+                    roomParticipants.clear()
+                    roomParticipants.addAll(participants)
+                    userAnswers.clear()
+                    
+                    _uiState.value = StudyRoomUiState.InLobby(roomCode, participants, isHost = isHost)
                 }
             }
         })
@@ -346,11 +423,30 @@ class StudyRoomViewModel : ViewModel() {
     }
 
     fun submitAnswer(roomCode: String, answer: String, timeRemainingRatio: Float) {
+        val current = _uiState.value
+        if (current is StudyRoomUiState.QuizActive) {
+            userAnswers[current.currentIndex] = answer
+        }
         val data = JSONObject()
         data.put("roomCode", roomCode)
         data.put("answer", answer)
         data.put("timeRemainingRatio", timeRemainingRatio)
         socket?.emit("submitAnswer", data)
+    }
+
+    fun goBackToLobby() {
+        val current = _uiState.value
+        if (current is StudyRoomUiState.QuizSummary) {
+            _uiState.value = StudyRoomUiState.InLobby(
+                roomCode = current.roomCode,
+                participants = ArrayList(roomParticipants),
+                isHost = current.isHost
+            )
+        }
+    }
+
+    fun exitRoom() {
+        leaveRoom()
     }
 
     fun nextQuestion(roomCode: String) {

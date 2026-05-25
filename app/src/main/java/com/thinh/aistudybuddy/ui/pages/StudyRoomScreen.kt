@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -37,6 +39,11 @@ import com.thinh.aistudybuddy.viewmodel.PlayerRanking
 import com.thinh.aistudybuddy.viewmodel.StudyRoomUiState
 import com.thinh.aistudybuddy.viewmodel.StudyRoomViewModel
 import com.thinh.aistudybuddy.ui.theme.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.HorizontalDivider
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -142,7 +149,14 @@ fun StudyRoomScreen(
                             state = state,
                             primaryColor = primaryCyan,
                             onAnswer = { answer, ratio -> viewModel.submitAnswer(state.roomCode, answer, ratio) },
-                            onNext = { viewModel.nextQuestion(state.roomCode) }
+                            onNext = { viewModel.nextQuestion(state.roomCode) },
+                            userDisplayName = userDisplayName
+                        )
+                        is StudyRoomUiState.QuizSummary -> QuizSummaryView(
+                            state = state,
+                            userDisplayName = userDisplayName,
+                            onBackToLobby = { viewModel.goBackToLobby() },
+                            onExit = { viewModel.exitRoom() }
                         )
                         is StudyRoomUiState.Error -> ErrorView(state.message, onRetry = onNavigateBack)
                         else -> {}
@@ -715,7 +729,8 @@ fun QuizRoomView(
     state: StudyRoomUiState.QuizActive, 
     primaryColor: Color, 
     onAnswer: (String, Float) -> Unit, 
-    onNext: () -> Unit
+    onNext: () -> Unit,
+    userDisplayName: String
 ) {
     val question = state.questions.getOrNull(state.currentIndex) ?: return
     var selectedAnswer by remember(state.currentIndex) { mutableStateOf<String?>(null) }
@@ -898,86 +913,98 @@ fun QuizRoomView(
         Spacer(Modifier.height(24.dp))
         
         Text(
-            "LIVE STANDINGS PODIUM", 
+            "LIVE STANDINGS", 
             color = Color.White.copy(alpha = 0.4f), 
             fontSize = 11.sp, 
             fontWeight = FontWeight.ExtraBold, 
             letterSpacing = 1.5.sp
         )
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(10.dp))
         
-        Row(
-            modifier = Modifier.fillMaxWidth(), 
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .animateContentSize()
+                .glassCard(shape = RoundedCornerShape(20.dp), backgroundColor = SurfaceCardContainer.copy(alpha = 0.3f))
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            val top3 = state.rankings.take(3)
-            val displayList = List(3) { index -> top3.getOrNull(index) }
+            val rankings = state.rankings
+            val myRankIndex = rankings.indexOfFirst { it.username == userDisplayName }
+            val showRankings = rankings.take(3)
             
-            displayList.forEachIndexed { i, player ->
-                val rankColor = when(i) { 
-                    0 -> Color(0xFFFFD700) 
-                    1 -> Color(0xFFC0C0C0) 
-                    else -> Color(0xFFCD7F32) 
+            showRankings.forEachIndexed { index, player ->
+                val rankColor = when(index) {
+                    0 -> Color(0xFFFFD700)
+                    1 -> Color(0xFFC0C0C0)
+                    2 -> Color(0xFFCD7F32)
+                    else -> Color.White.copy(alpha = 0.6f)
                 }
                 
-                Box(
+                Row(
                     modifier = Modifier
-                        .weight(1f)
-                        .animateContentSize()
-                        .glassCard(shape = RoundedCornerShape(16.dp), backgroundColor = SurfaceCardContainer.copy(alpha = 0.4f))
-                        .cyberBorder(shape = RoundedCornerShape(16.dp), borderWidth = 1.dp, startColor = rankColor.copy(alpha = 0.4f), endColor = rankColor.copy(alpha = 0.1f))
+                        .fillMaxWidth()
+                        .background(
+                            if (player.username == userDisplayName) PrimaryNeonTeal.copy(alpha = 0.1f) 
+                            else Color.Transparent, 
+                            RoundedCornerShape(12.dp)
+                        )
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(
-                        modifier = Modifier.padding(10.dp), 
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(24.dp)
-                                .clip(CircleShape)
-                                .background(rankColor.copy(alpha = 0.15f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                "${i+1}", 
-                                color = rankColor, 
-                                fontWeight = FontWeight.Black, 
-                                fontSize = 12.sp
-                            )
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        if (player != null) {
-                            Text(
-                                player.username, 
-                                color = Color.White, 
-                                fontSize = 12.sp, 
-                                fontWeight = FontWeight.Bold, 
-                                maxLines = 1, 
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Spacer(Modifier.height(2.dp))
-                            Text(
-                                "${player.score}", 
-                                color = PrimaryNeonTeal, 
-                                fontSize = 15.sp, 
-                                fontWeight = FontWeight.Black
-                            )
-                        } else {
-                            Text(
-                                "--", 
-                                color = Color.White.copy(alpha = 0.2f), 
-                                fontSize = 12.sp, 
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(Modifier.height(2.dp))
-                            Text(
-                                "0", 
-                                color = Color.White.copy(alpha = 0.2f), 
-                                fontSize = 15.sp, 
-                                fontWeight = FontWeight.Black
-                            )
-                        }
-                    }
+                    Text(
+                        "#${index + 1}",
+                        color = rankColor,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 14.sp,
+                        modifier = Modifier.width(32.dp)
+                    )
+                    Text(
+                        player.username,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        "${player.score} XP",
+                        color = PrimaryNeonTeal,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 14.sp
+                    )
+                }
+            }
+            
+            if (myRankIndex >= 3) {
+                HorizontalDivider(color = Color.White.copy(alpha = 0.08f), thickness = 1.dp)
+                val myPlayer = rankings[myRankIndex]
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(PrimaryNeonTeal.copy(alpha = 0.15f), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "#${myRankIndex + 1}",
+                        color = PrimaryNeonTeal,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 14.sp,
+                        modifier = Modifier.width(32.dp)
+                    )
+                    Text(
+                        "${myPlayer.username} (You)",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        "${myPlayer.score} XP",
+                        color = PrimaryNeonTeal,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 14.sp
+                    )
                 }
             }
         }
@@ -1040,3 +1067,310 @@ private fun Modifier.scale(scale: Float): Modifier = this.graphicsLayer(
     scaleX = scale,
     scaleY = scale
 )
+
+@Composable
+fun QuizSummaryView(
+    state: StudyRoomUiState.QuizSummary,
+    userDisplayName: String,
+    onBackToLobby: () -> Unit,
+    onExit: () -> Unit
+) {
+    var expandedReviewIndex by remember { mutableStateOf<Int?>(null) }
+    
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp)
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // Winner Podium Icon
+        Box(
+            modifier = Modifier
+                .size(100.dp)
+                .glassCard(shape = CircleShape, backgroundColor = SurfaceCardContainer.copy(alpha = 0.5f))
+                .cyberBorder(shape = CircleShape, borderWidth = 2.dp, startColor = SecondaryTangerine, endColor = PrimaryNeonTeal),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Default.EmojiEvents, 
+                contentDescription = null, 
+                tint = SecondaryTangerine, 
+                modifier = Modifier.size(54.dp)
+            )
+        }
+        
+        Spacer(Modifier.height(16.dp))
+        
+        Text(
+            "Challenge Completed!",
+            color = Color.White,
+            fontSize = 24.sp,
+            fontWeight = FontWeight.ExtraBold,
+            textAlign = TextAlign.Center
+        )
+        
+        Text(
+            "Final Standings for Room ${state.roomCode}",
+            color = Color.White.copy(alpha = 0.5f),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+        
+        Spacer(Modifier.height(24.dp))
+        
+        // Leaderboard Table
+        Text(
+            "FINAL LEADERBOARD", 
+            color = Color.White.copy(alpha = 0.4f), 
+            fontSize = 11.sp, 
+            fontWeight = FontWeight.ExtraBold, 
+            letterSpacing = 1.5.sp,
+            modifier = Modifier.align(Alignment.Start)
+        )
+        Spacer(Modifier.height(10.dp))
+        
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .glassCard(shape = RoundedCornerShape(24.dp), backgroundColor = SurfaceCardContainer.copy(alpha = 0.4f))
+                .cyberBorder(shape = RoundedCornerShape(24.dp), borderWidth = 1.dp, startColor = Color.White.copy(alpha = 0.05f), endColor = Color.White.copy(alpha = 0.05f))
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            state.rankings.forEachIndexed { idx, player ->
+                val isMe = player.username == userDisplayName
+                val rankColor = when(idx) {
+                    0 -> Color(0xFFFFD700)
+                    1 -> Color(0xFFC0C0C0)
+                    2 -> Color(0xFFCD7F32)
+                    else -> Color.White.copy(alpha = 0.5f)
+                }
+                
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            if (isMe) PrimaryNeonTeal.copy(alpha = 0.12f) else Color.Transparent, 
+                            RoundedCornerShape(12.dp)
+                        )
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "#${idx + 1}",
+                        color = rankColor,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 15.sp,
+                        modifier = Modifier.width(36.dp)
+                    )
+                    
+                    Text(
+                        text = player.username + (if (isMe) " (You)" else ""),
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        modifier = Modifier.weight(1f)
+                    )
+                    
+                    Text(
+                        text = "${player.score} XP",
+                        color = PrimaryNeonTeal,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 15.sp
+                    )
+                }
+            }
+        }
+        
+        Spacer(Modifier.height(32.dp))
+        
+        // Quiz Review Section
+        Text(
+            "CHALLENGE QUIZ REVIEW", 
+            color = Color.White.copy(alpha = 0.4f), 
+            fontSize = 11.sp, 
+            fontWeight = FontWeight.ExtraBold, 
+            letterSpacing = 1.5.sp,
+            modifier = Modifier.align(Alignment.Start)
+        )
+        Spacer(Modifier.height(10.dp))
+        
+        state.questions.forEachIndexed { qIdx, question ->
+            val userAnswer = state.userAnswers[qIdx] ?: ""
+            val isCorrect = question.correctAnswerIndex == when(userAnswer) {
+                "A" -> 0; "B" -> 1; "C" -> 2; "D" -> 3; else -> -1
+            }
+            
+            val isExpanded = expandedReviewIndex == qIdx
+            
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp)
+                    .glassCard(shape = RoundedCornerShape(20.dp), backgroundColor = SurfaceCardContainer.copy(alpha = 0.3f))
+                    .cyberBorder(
+                        shape = RoundedCornerShape(20.dp), 
+                        borderWidth = 1.dp, 
+                        startColor = if (userAnswer.isEmpty()) Color.White.copy(alpha = 0.05f) 
+                                     else if (isCorrect) EmeraldSuccess.copy(alpha = 0.4f) 
+                                     else RoseWarning.copy(alpha = 0.4f),
+                        endColor = Color.White.copy(alpha = 0.05f)
+                    )
+                    .clickable { expandedReviewIndex = if (isExpanded) null else qIdx }
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (userAnswer.isEmpty()) Color.White.copy(alpha = 0.08f)
+                                    else if (isCorrect) EmeraldSuccess.copy(alpha = 0.15f)
+                                    else RoseWarning.copy(alpha = 0.15f)
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "${qIdx + 1}",
+                                color = if (userAnswer.isEmpty()) Color.White.copy(alpha = 0.6f)
+                                        else if (isCorrect) EmeraldSuccess
+                                        else RoseWarning,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                        }
+                        
+                        Spacer(Modifier.width(12.dp))
+                        
+                        Text(
+                            text = question.question,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            maxLines = if (isExpanded) 100 else 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                        
+                        Icon(
+                            imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = null,
+                            tint = Color.White.copy(alpha = 0.3f)
+                        )
+                    }
+                    
+                    if (isExpanded) {
+                        Spacer(Modifier.height(16.dp))
+                        
+                        question.options.forEachIndexed { oIdx, opt ->
+                            val optionKey = when(oIdx) { 0 -> "A"; 1 -> "B"; 2 -> "C"; else -> "D" }
+                            val isCorrectOption = question.correctAnswerIndex == oIdx
+                            val isUserSelected = userAnswer == optionKey
+                            
+                            val optBg = if (isCorrectOption) EmeraldSuccess.copy(alpha = 0.12f)
+                                        else if (isUserSelected) RoseWarning.copy(alpha = 0.12f)
+                                        else Color.White.copy(alpha = 0.03f)
+                                        
+                            val optBorder = if (isCorrectOption) EmeraldSuccess
+                                            else if (isUserSelected) RoseWarning
+                                            else Color.White.copy(alpha = 0.08f)
+                            
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 8.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(optBg)
+                                    .border(1.dp, optBorder, RoundedCornerShape(12.dp))
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .clip(CircleShape)
+                                        .background(if (isCorrectOption) EmeraldSuccess else if (isUserSelected) RoseWarning else Color.White.copy(alpha = 0.08f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = optionKey,
+                                        color = if (isCorrectOption || isUserSelected) Color.Black else Color.White.copy(alpha = 0.6f),
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                                
+                                Spacer(Modifier.width(12.dp))
+                                
+                                Text(
+                                    text = opt,
+                                    color = Color.White,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                        
+                        if (question.explanation.isNotEmpty()) {
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = "Explanation: ${question.explanation}",
+                                color = Color.White.copy(alpha = 0.5f),
+                                fontSize = 12.sp,
+                                lineHeight = 18.sp,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        
+        Spacer(Modifier.height(36.dp))
+        
+        // Two Navigation Buttons
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(56.dp)
+                    .glassCard(shape = RoundedCornerShape(16.dp), backgroundColor = SurfaceContainerHigh.copy(alpha = 0.4f))
+                    .cyberBorder(shape = RoundedCornerShape(16.dp), borderWidth = 1.dp, startColor = Color.White.copy(alpha = 0.2f), endColor = Color.White.copy(alpha = 0.2f))
+                    .clickable { onExit() },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "EXIT HUB",
+                    color = Color.White,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 14.sp
+                )
+            }
+            
+            Button(
+                onClick = onBackToLobby,
+                modifier = Modifier
+                    .weight(1.5f)
+                    .height(56.dp)
+                    .shadow(12.dp, RoundedCornerShape(16.dp), spotColor = PrimaryNeonTeal),
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryNeonTeal),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Text(
+                    text = "BACK TO LOBBY",
+                    color = Color.Black,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 14.sp
+                )
+            }
+        }
+        
+        Spacer(Modifier.height(48.dp))
+    }
+}

@@ -38,12 +38,20 @@ import com.thinh.aistudybuddy.data.models.QuizQuestion
 import com.thinh.aistudybuddy.viewmodel.PlayerRanking
 import com.thinh.aistudybuddy.viewmodel.StudyRoomUiState
 import com.thinh.aistudybuddy.viewmodel.StudyRoomViewModel
+import com.thinh.aistudybuddy.viewmodel.QuizGenerationStatus
 import com.thinh.aistudybuddy.ui.theme.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.platform.LocalContext
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.os.Build
+import android.content.Context
+import android.net.Uri
+
+private val StudyRoomSecondary = Color(0xFF3B82F6)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -53,6 +61,11 @@ fun StudyRoomScreen(
     userDisplayName: String
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    var showQuitConfirmation by remember { mutableStateOf(false) }
+
+    BackHandler(enabled = uiState !is StudyRoomUiState.Initial) {
+        showQuitConfirmation = true
+    }
     val documents by viewModel.documents.collectAsState()
     val isLoadingDocs by viewModel.isLoadingDocs.collectAsState()
     val isPreparingQuiz by viewModel.isPreparingQuiz.collectAsState()
@@ -60,7 +73,7 @@ fun StudyRoomScreen(
     val primaryCyan = PrimaryNeonTeal
 
     Box(modifier = Modifier.fillMaxSize().background(DeepSpaceBackground)) {
-        // Space Ambient glows
+
         val infiniteTransition = rememberInfiniteTransition(label = "study_room_ambient")
         val pulseScale by infiniteTransition.animateFloat(
             initialValue = 0.9f,
@@ -106,7 +119,7 @@ fun StudyRoomScreen(
                         IconButton(
                             onClick = {
                                 if (uiState !is StudyRoomUiState.Initial) {
-                                    viewModel.leaveRoom()
+                                    showQuitConfirmation = true
                                 } else {
                                     onNavigateBack()
                                 }
@@ -123,7 +136,7 @@ fun StudyRoomScreen(
         ) { padding ->
             Box(modifier = Modifier.fillMaxSize().padding(padding)) {
                 if (isPreparingQuiz) {
-                    WaitingForHostView("Preparing your challenge questions...", primaryCyan)
+                    WaitingForHostView("Generating Quiz...", primaryCyan)
                 } else {
                     when (val state = uiState) {
                         is StudyRoomUiState.Initial -> InitialRoomView(
@@ -133,18 +146,20 @@ fun StudyRoomScreen(
                         )
                         is StudyRoomUiState.InLobby -> LobbyView(
                             state = state,
-                            primaryColor = primaryCyan,
-                            onStartQuiz = { viewModel.requestQuizSelection(state.roomCode) },
-                            onStartFocus = { duration -> viewModel.requestStartFocus(state.roomCode, duration) }
+                            viewModel = viewModel,
+                            primaryColor = primaryCyan
                         )
-                        is StudyRoomUiState.SelectingMaterial -> SelectingMaterialView(
-                            roomCode = state.roomCode,
-                            documents = documents,
-                            isLoading = isLoadingDocs,
-                            primaryColor = primaryCyan,
-                            onDocumentSelected = { doc -> viewModel.selectDocumentForQuiz(state.roomCode, doc) }
+                        is StudyRoomUiState.QuizCountdown -> StudyRoomCountdownView(
+                            state = state,
+                            onFinished = {
+                                viewModel.startQuizAfterCountdown(
+                                    roomCode = state.roomCode,
+                                    questions = state.questions,
+                                    endsAt = state.endsAt,
+                                    isHost = state.isHost
+                                )
+                            }
                         )
-                        is StudyRoomUiState.WaitingForHost -> WaitingForHostView(state.message, primaryCyan)
                         is StudyRoomUiState.QuizActive -> QuizRoomView(
                             state = state,
                             primaryColor = primaryCyan,
@@ -162,6 +177,42 @@ fun StudyRoomScreen(
                         else -> {}
                     }
                 }
+            }
+            
+            if (showQuitConfirmation) {
+                AlertDialog(
+                    onDismissRequest = { showQuitConfirmation = false },
+                    containerColor = DeepSpaceBackground.copy(alpha = 0.95f),
+                    shape = RoundedCornerShape(24.dp),
+                    title = {
+                        Text("Quit Study Room?", color = Color.White, fontWeight = FontWeight.ExtraBold)
+                    },
+                    text = {
+                        Text(
+                            text = "Are you sure you want to leave the room? If you are the Host, this will end the session and cancel quiz generation.",
+                            color = Color.White.copy(alpha = 0.7f),
+                            lineHeight = 22.sp
+                        )
+                    },
+                    confirmButton = {
+                        Button(
+                            colors = ButtonDefaults.buttonColors(containerColor = RoseWarning),
+                            shape = RoundedCornerShape(12.dp),
+                            onClick = {
+                                showQuitConfirmation = false
+                                viewModel.leaveRoom()
+                            }
+                        ) {
+                            Text("LEAVE", color = Color.White, fontWeight = FontWeight.Black)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showQuitConfirmation = false }) {
+                            Text("CANCEL", color = Color.White.copy(alpha = 0.5f), fontWeight = FontWeight.Bold)
+                        }
+                    },
+                    modifier = Modifier.border(1.dp, RoseWarning.copy(alpha = 0.3f), RoundedCornerShape(24.dp))
+                )
             }
         }
     }
@@ -317,13 +368,30 @@ fun InitialRoomView(primaryColor: Color, onJoin: (String) -> Unit, onCreateRoom:
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LobbyView(
     state: StudyRoomUiState.InLobby, 
-    primaryColor: Color, 
-    onStartQuiz: () -> Unit,
-    onStartFocus: (Int) -> Unit
+    viewModel: StudyRoomViewModel,
+    primaryColor: Color
 ) {
+    val selectedDocName by viewModel.selectedDocumentName.collectAsState()
+    val genStatus by viewModel.generationStatus.collectAsState()
+    val documents by viewModel.documents.collectAsState()
+    val isLoadingDocs by viewModel.isLoadingDocs.collectAsState()
+
+    var showDocSelector by remember { mutableStateOf(false) }
+    var docToConfirm by remember { mutableStateOf<com.thinh.aistudybuddy.data.models.Document?>(null) }
+    val context = LocalContext.current
+    val externalFilePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            viewModel.uploadAndSelectExternalDocument(context, uri, state.roomCode)
+            showDocSelector = false
+        }
+    }
+
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         Box(
             modifier = Modifier
@@ -344,11 +412,13 @@ fun LobbyView(
                 )
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    state.roomCode, 
+                    text = state.roomCode, 
                     color = PrimaryNeonTeal, 
                     fontSize = 58.sp, 
                     fontWeight = FontWeight.ExtraBold, 
-                    letterSpacing = 8.sp
+                    letterSpacing = 8.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(start = 8.dp)
                 )
                 Spacer(Modifier.height(20.dp))
                 
@@ -391,40 +461,40 @@ fun LobbyView(
             }
         }
 
-        Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.height(20.dp))
         Text(
             "COMMUNITY PARTICIPANTS", 
             color = Color.White.copy(alpha = 0.5f), 
-            fontSize = 12.sp, 
+            fontSize = 11.sp, 
             fontWeight = FontWeight.ExtraBold, 
             letterSpacing = 1.5.sp
         )
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(10.dp))
 
         LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(12.dp), 
+            verticalArrangement = Arrangement.spacedBy(8.dp), 
             modifier = Modifier.weight(1f)
         ) {
             itemsIndexed(state.participants) { index, nickname ->
                 val avatarGradient = when(index % 3) {
                     0 -> Brush.linearGradient(listOf(PrimaryNeonTeal, Color(0xFF00E5FF)))
-                    1 -> Brush.linearGradient(listOf(SecondaryTangerine, Color(0xFFFFB300)))
+                    1 -> Brush.linearGradient(listOf(StudyRoomSecondary, Color(0xFF60A5FA)))
                     else -> Brush.linearGradient(listOf(TertiaryCosmicIndigo, Color(0xFF651FFF)))
                 }
                 
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .glassCard(shape = RoundedCornerShape(20.dp), backgroundColor = SurfaceCardContainer.copy(alpha = 0.4f))
-                        .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(20.dp))
+                        .glassCard(shape = RoundedCornerShape(16.dp), backgroundColor = SurfaceCardContainer.copy(alpha = 0.4f))
+                        .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(16.dp))
                 ) {
                     Row(
-                        modifier = Modifier.padding(16.dp), 
+                        modifier = Modifier.padding(12.dp), 
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(44.dp)
+                                .size(36.dp)
                                 .clip(CircleShape)
                                 .background(avatarGradient),
                             contentAlignment = Alignment.Center
@@ -433,15 +503,15 @@ fun LobbyView(
                                 nickname.take(1).uppercase(), 
                                 color = Color.Black, 
                                 fontWeight = FontWeight.Black, 
-                                fontSize = 18.sp
+                                fontSize = 15.sp
                             )
                         }
-                        Spacer(Modifier.width(16.dp))
+                        Spacer(Modifier.width(12.dp))
                         Text(
                             nickname, 
                             color = Color.White, 
                             fontWeight = FontWeight.Bold, 
-                            fontSize = 16.sp
+                            fontSize = 14.sp
                         )
                         Spacer(Modifier.weight(1f))
                         
@@ -449,16 +519,163 @@ fun LobbyView(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.End
                         ) {
-                            Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(EmeraldSuccess))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Ready", color = EmeraldSuccess, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Box(modifier = Modifier.size(5.dp).clip(CircleShape).background(EmeraldSuccess))
+                            Spacer(Modifier.width(5.dp))
+                            Text("Ready", color = EmeraldSuccess, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
             }
         }
 
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(16.dp))
+        Text(
+            "STUDY MATERIAL SOURCE", 
+            color = Color.White.copy(alpha = 0.5f), 
+            fontSize = 11.sp, 
+            fontWeight = FontWeight.ExtraBold, 
+            letterSpacing = 1.5.sp
+        )
+        Spacer(Modifier.height(8.dp))
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .glassCard(shape = RoundedCornerShape(20.dp), backgroundColor = SurfaceCardContainer.copy(alpha = 0.4f))
+                .cyberBorder(
+                    shape = RoundedCornerShape(20.dp), 
+                    borderWidth = 1.dp, 
+                    startColor = if (selectedDocName != null) PrimaryNeonTeal.copy(alpha = 0.6f) else Color.White.copy(alpha = 0.1f), 
+                    endColor = if (selectedDocName != null) TertiaryCosmicIndigo.copy(alpha = 0.6f) else Color.White.copy(alpha = 0.1f)
+                )
+                .clickable(enabled = state.isHost) { showDocSelector = true }
+        ) {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .glassCard(
+                            shape = RoundedCornerShape(10.dp), 
+                            backgroundColor = if (selectedDocName != null) PrimaryNeonTeal.copy(alpha = 0.1f) else SurfaceContainerHigh.copy(alpha = 0.3f)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (selectedDocName != null) Icons.Default.PictureAsPdf else Icons.Default.LibraryBooks,
+                        contentDescription = null,
+                        tint = if (selectedDocName != null) PrimaryNeonTeal else Color.White.copy(alpha = 0.3f),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                Spacer(Modifier.width(16.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    if (selectedDocName != null) {
+                        Text(
+                            text = selectedDocName!!,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        
+                        Spacer(Modifier.height(4.dp))
+                        
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            when (genStatus) {
+                                QuizGenerationStatus.GENERATING -> {
+                                    val infiniteTransition = rememberInfiniteTransition("mascot_spin")
+                                    val rotation by infiniteTransition.animateFloat(
+                                        initialValue = 0f,
+                                        targetValue = 360f,
+                                        animationSpec = infiniteRepeatable(tween(2000, easing = LinearEasing)),
+                                        label = "rotation"
+                                    )
+                                    Icon(
+                                        imageVector = Icons.Default.Cached,
+                                        contentDescription = null,
+                                        tint = StudyRoomSecondary,
+                                        modifier = Modifier.size(12.dp).graphicsLayer(rotationZ = rotation)
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        "AI generating quiz questions under the hood...",
+                                        color = StudyRoomSecondary,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                                QuizGenerationStatus.READY -> {
+                                    Icon(
+                                        imageVector = Icons.Default.CheckCircle,
+                                        contentDescription = null,
+                                        tint = EmeraldSuccess,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        "AI Quiz compiled & ready to launch!",
+                                        color = EmeraldSuccess,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                QuizGenerationStatus.ERROR -> {
+                                    Icon(
+                                        imageVector = Icons.Default.Error,
+                                        contentDescription = null,
+                                        tint = RoseWarning,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        "Generation failed. Tap to retry compiling.",
+                                        color = RoseWarning,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                else -> {
+                                    Text(
+                                        "Preparing background generation...",
+                                        color = Color.White.copy(alpha = 0.4f),
+                                        fontSize = 10.sp
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = "No Material Selected",
+                            color = Color.White.copy(alpha = 0.4f),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = if (state.isHost) "Tap to select a textbook PDF" else "Waiting for host to select syllabus",
+                            color = Color.White.copy(alpha = 0.3f),
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+
+                if (state.isHost) {
+                    Icon(
+                        imageVector = Icons.Default.ChevronRight,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.3f)
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(20.dp))
         
         if (state.isHost) {
             Row(
@@ -471,7 +688,7 @@ fun LobbyView(
                         .height(60.dp)
                         .glassCard(shape = RoundedCornerShape(20.dp), backgroundColor = SurfaceContainerHigh.copy(alpha = 0.4f))
                         .border(1.5.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(20.dp))
-                        .clickable { onStartFocus(25) },
+                        .clickable { viewModel.requestStartFocus(state.roomCode, 25) },
                     contentAlignment = Alignment.Center
                 ) {
                     Row(
@@ -484,18 +701,32 @@ fun LobbyView(
                     }
                 }
 
+                val isStartQuizEnabled = selectedDocName != null
                 Button(
-                    onClick = onStartQuiz,
+                    onClick = { viewModel.startQuiz(state.roomCode) },
+                    enabled = isStartQuizEnabled,
                     modifier = Modifier
                         .weight(1.5f)
                         .height(60.dp)
-                        .shadow(16.dp, RoundedCornerShape(20.dp), spotColor = SecondaryTangerine),
-                    colors = ButtonDefaults.buttonColors(containerColor = SecondaryTangerine),
+                        .shadow(if (isStartQuizEnabled) 16.dp else 0.dp, RoundedCornerShape(20.dp), spotColor = StudyRoomSecondary),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = StudyRoomSecondary,
+                        disabledContainerColor = SurfaceCardContainer.copy(alpha = 0.2f)
+                    ),
                     shape = RoundedCornerShape(20.dp)
                 ) {
-                    Icon(Icons.Default.Quiz, null, tint = Color.Black)
+                    Icon(
+                        Icons.Default.Quiz, 
+                        null, 
+                        tint = if (isStartQuizEnabled) Color.Black else Color.White.copy(alpha = 0.3f)
+                    )
                     Spacer(Modifier.width(8.dp))
-                    Text("START QUIZ", fontWeight = FontWeight.Black, color = Color.Black, letterSpacing = 0.5.sp)
+                    Text(
+                        "START QUIZ", 
+                        fontWeight = FontWeight.Black, 
+                        color = if (isStartQuizEnabled) Color.Black else Color.White.copy(alpha = 0.3f), 
+                        letterSpacing = 0.5.sp
+                    )
                 }
             }
         } else {
@@ -525,116 +756,190 @@ fun LobbyView(
             }
         }
     }
-}
 
-@Composable
-fun SelectingMaterialView(
-    roomCode: String, 
-    documents: List<com.thinh.aistudybuddy.data.models.Document>, 
-    isLoading: Boolean, 
-    primaryColor: Color, 
-    onDocumentSelected: (com.thinh.aistudybuddy.data.models.Document) -> Unit
-) {
-    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
-        Box(
+    if (showDocSelector && state.isHost) {
+        AlertDialog(
+            onDismissRequest = { showDocSelector = false },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+            containerColor = Color.Transparent,
             modifier = Modifier
                 .fillMaxWidth()
-                .glassCard(shape = RoundedCornerShape(24.dp), backgroundColor = SurfaceCardContainer.copy(alpha = 0.4f))
-                .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(24.dp))
-        ) {
-            Row(
-                modifier = Modifier.padding(20.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .glassCard(shape = CircleShape, backgroundColor = PrimaryNeonTeal.copy(alpha = 0.1f))
-                        .cyberBorder(shape = CircleShape, borderWidth = 1.dp, startColor = PrimaryNeonTeal, endColor = TertiaryCosmicIndigo),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Default.Description, null, tint = PrimaryNeonTeal)
-                }
-                Spacer(Modifier.width(16.dp))
-                Column {
-                    Text("Choose Material", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
-                    Text("Select the source for the RAG-generated quiz", color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp)
-                }
-            }
-        }
-        
-        Spacer(Modifier.height(28.dp))
-        
-        if (isLoading) {
-            Box(Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) { 
-                CircularProgressIndicator(color = PrimaryNeonTeal, strokeWidth = 4.dp) 
-            }
-        } else {
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(12.dp), 
-                modifier = Modifier.weight(1f)
-            ) {
-                items(documents) { doc ->
+                .fillMaxHeight(0.85f)
+                .padding(24.dp)
+                .clip(RoundedCornerShape(28.dp))
+                .background(DeepSpaceBackground.copy(alpha = 0.95f))
+                .cyberBorder(shape = RoundedCornerShape(28.dp), borderWidth = 1.5.dp, startColor = PrimaryNeonTeal, endColor = TertiaryCosmicIndigo),
+            title = {
+                Text(
+                    text = "Select Study Material",
+                    color = Color.White,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 22.sp
+                )
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    Text(
+                        text = "Select the PDF textbook/syllabus for the AI to dynamically compile quiz questions.",
+                        color = Color.White.copy(alpha = 0.5f),
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+                    
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .glassCard(shape = RoundedCornerShape(20.dp), backgroundColor = SurfaceCardContainer.copy(alpha = 0.4f))
-                            .cyberBorder(shape = RoundedCornerShape(20.dp), borderWidth = 1.dp, startColor = Color.White.copy(alpha = 0.05f), endColor = Color.White.copy(alpha = 0.05f))
-                            .clickable { onDocumentSelected(doc) }
+                            .padding(bottom = 16.dp)
+                            .glassCard(shape = RoundedCornerShape(16.dp), backgroundColor = PrimaryNeonTeal.copy(alpha = 0.08f))
+                            .clickable {
+                                externalFilePickerLauncher.launch("application/pdf")
+                            }
                     ) {
-                        Row(modifier = Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Box(
                                 modifier = Modifier
-                                    .size(40.dp)
-                                    .glassCard(shape = RoundedCornerShape(8.dp), backgroundColor = SecondaryTangerine.copy(alpha = 0.1f)),
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(PrimaryNeonTeal.copy(alpha = 0.15f)),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(Icons.Default.PictureAsPdf, null, tint = SecondaryTangerine, modifier = Modifier.size(24.dp))
+                                Icon(Icons.Default.Upload, null, tint = PrimaryNeonTeal, modifier = Modifier.size(20.dp))
                             }
-                            Spacer(Modifier.width(16.dp))
+                            Spacer(Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    doc.fileName, 
-                                    color = Color.White, 
-                                    fontWeight = FontWeight.Bold, 
-                                    maxLines = 1, 
-                                    overflow = TextOverflow.Ellipsis,
-                                    fontSize = 15.sp
+                                    text = "Import PDF from Storage",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 14.sp
                                 )
                                 Text(
-                                    "${doc.createdAt ?: "Recently Added"}", 
-                                    color = Color.White.copy(alpha = 0.4f), 
+                                    text = "Upload a new syllabus to generate AI quiz instantly",
+                                    color = Color.White.copy(alpha = 0.5f),
                                     fontSize = 11.sp,
                                     modifier = Modifier.padding(top = 2.dp)
                                 )
                             }
-                            Icon(Icons.Default.ChevronRight, null, tint = Color.White.copy(alpha = 0.3f))
+                            Icon(Icons.Default.Add, null, tint = PrimaryNeonTeal)
+                        }
+                    }
+                    
+                    if (isLoadingDocs) {
+                        Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = PrimaryNeonTeal)
+                        }
+                    } else if (documents.isEmpty()) {
+                        Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            Text("No documents uploaded yet.", color = Color.White.copy(alpha = 0.4f))
+                        }
+                    } else {
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.weight(1f).fillMaxWidth()
+                        ) {
+                            items(documents) { doc ->
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .glassCard(shape = RoundedCornerShape(16.dp), backgroundColor = SurfaceCardContainer.copy(alpha = 0.4f))
+                                        .cyberBorder(shape = RoundedCornerShape(16.dp), borderWidth = 1.dp, startColor = Color.White.copy(alpha = 0.05f), endColor = Color.White.copy(alpha = 0.05f))
+                                        .clickable {
+                                            docToConfirm = doc
+                                            showDocSelector = false
+                                        }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(16.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(36.dp)
+                                                .glassCard(shape = RoundedCornerShape(8.dp), backgroundColor = StudyRoomSecondary.copy(alpha = 0.1f)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(Icons.Default.PictureAsPdf, null, tint = StudyRoomSecondary, modifier = Modifier.size(20.dp))
+                                        }
+                                        Spacer(Modifier.width(12.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = doc.fileName,
+                                                color = Color.White,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 14.sp,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Text(
+                                                text = doc.createdAt ?: "Recently Added",
+                                                color = Color.White.copy(alpha = 0.4f),
+                                                fontSize = 11.sp,
+                                                modifier = Modifier.padding(top = 2.dp)
+                                            )
+                                        }
+                                        Icon(Icons.Default.ChevronRight, null, tint = Color.White.copy(alpha = 0.3f))
+                                    }
+                                }
+                            }
                         }
                     }
                 }
+            },
+            confirmButton = {
+                TextButton(onClick = { showDocSelector = false }) {
+                    Text("CLOSE", color = PrimaryNeonTeal, fontWeight = FontWeight.Bold)
+                }
             }
-        }
+        )
+    }
 
-        Spacer(Modifier.height(24.dp))
-        
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(60.dp)
-                .glassCard(shape = RoundedCornerShape(20.dp), backgroundColor = SurfaceCardContainer.copy(alpha = 0.3f))
-                .cyberBorder(shape = RoundedCornerShape(20.dp), borderWidth = 1.5.dp, startColor = PrimaryNeonTeal, endColor = TertiaryCosmicIndigo)
-                .clickable { },
-            contentAlignment = Alignment.Center
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
-            ) {
-                Icon(Icons.Default.CloudUpload, null, tint = PrimaryNeonTeal)
-                Spacer(Modifier.width(12.dp))
-                Text("UPLOAD NEW SYLLABUS PDF", color = PrimaryNeonTeal, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
-            }
-        }
+    if (docToConfirm != null) {
+        AlertDialog(
+            onDismissRequest = { docToConfirm = null },
+            containerColor = DeepSpaceBackground.copy(alpha = 0.95f),
+            shape = RoundedCornerShape(24.dp),
+            title = {
+                Text(
+                    text = if (selectedDocName == null) "Generate AI Quiz?" else "Change Study Material?",
+                    color = Color.White,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            },
+            text = {
+                Text(
+                    text = if (selectedDocName == null) {
+                        "Confirm selecting \"${docToConfirm?.fileName}\" for the dynamic quiz? AI will begin parsing the content under the hood immediately."
+                    } else {
+                        "You are changing the syllabus document to \"${docToConfirm?.fileName}\". This will immediately cancel the active quiz generation for the previous file to prevent server congestion and start fresh. Proceed?"
+                    },
+                    color = Color.White.copy(alpha = 0.7f),
+                    lineHeight = 22.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryNeonTeal),
+                    shape = RoundedCornerShape(12.dp),
+                    onClick = {
+                        docToConfirm?.let { doc ->
+                            viewModel.selectDocumentForQuiz(state.roomCode, doc)
+                        }
+                        docToConfirm = null
+                    }
+                ) {
+                    Text("CONFIRM", color = Color.Black, fontWeight = FontWeight.Black)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { docToConfirm = null }) {
+                    Text("CANCEL", color = Color.White.copy(alpha = 0.5f), fontWeight = FontWeight.Bold)
+                }
+            },
+            modifier = Modifier.border(1.dp, PrimaryNeonTeal.copy(alpha = 0.3f), RoundedCornerShape(24.dp))
+        )
     }
 }
 
@@ -683,21 +988,13 @@ fun WaitingForHostView(message: String, primaryColor: Color) {
                 )
             }
 
-            Box(
+            InteractiveMascot(
+                mode = "BALANCED",
                 modifier = Modifier
                     .graphicsLayer(scaleX = scale, scaleY = scale)
-                    .size(80.dp)
-                    .glassCard(shape = CircleShape, backgroundColor = PrimaryNeonTeal.copy(alpha = 0.1f))
-                    .cyberBorder(shape = CircleShape, borderWidth = 1.5.dp, startColor = PrimaryNeonTeal, endColor = TertiaryCosmicIndigo),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    Icons.Default.AutoAwesome, 
-                    null, 
-                    tint = PrimaryNeonTeal, 
-                    modifier = Modifier.size(36.dp)
-                )
-            }
+                    .size(100.dp)
+                    .offset(y = 12.dp)
+            )
         }
         
         Spacer(Modifier.height(48.dp))
@@ -734,6 +1031,7 @@ fun QuizRoomView(
 ) {
     val question = state.questions.getOrNull(state.currentIndex) ?: return
     var selectedAnswer by remember(state.currentIndex) { mutableStateOf<String?>(null) }
+    var hasSubmitted by remember(state.currentIndex) { mutableStateOf(false) }
     var timeRemaining by remember(state.currentIndex) { mutableStateOf(30f) }
     
     LaunchedEffect(state.endsAt) {
@@ -743,9 +1041,12 @@ fun QuizRoomView(
                 val diff = state.endsAt - now
                 timeRemaining = (diff / 1000f).coerceAtLeast(0f)
                 if (timeRemaining <= 0) {
-                    if (selectedAnswer == null) {
-                        onAnswer("", 0f)
-                        selectedAnswer = "" 
+                    if (!hasSubmitted) {
+                        onAnswer(selectedAnswer ?: "", 0f)
+                        hasSubmitted = true
+                    }
+                    if (state.isHost) {
+                        onNext()
                     }
                     break
                 }
@@ -856,9 +1157,8 @@ fun QuizRoomView(
                             brush = Brush.linearGradient(colors = borderGradient),
                             shape = RoundedCornerShape(20.dp)
                         )
-                        .clickable(enabled = selectedAnswer == null) {
+                        .clickable(enabled = !hasSubmitted) {
                             selectedAnswer = key
-                            onAnswer(key, timeRemaining / 30f)
                         }
                 ) {
                     Row(
@@ -893,7 +1193,13 @@ fun QuizRoomView(
         if (state.isHost) {
             Spacer(Modifier.height(16.dp))
             Button(
-                onClick = onNext,
+                onClick = {
+                    if (!hasSubmitted) {
+                        onAnswer(selectedAnswer ?: "", timeRemaining / 30f)
+                        hasSubmitted = true
+                    }
+                    onNext()
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp)
@@ -904,6 +1210,33 @@ fun QuizRoomView(
                 Text(
                     if (state.currentIndex < state.questions.size - 1) "NEXT QUESTION" else "FINISH MULTI-QUIZ",
                     color = Color.Black,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 0.5.sp
+                )
+            }
+        } else {
+            Spacer(Modifier.height(16.dp))
+            Button(
+                onClick = {
+                    if (!hasSubmitted && selectedAnswer != null) {
+                        onAnswer(selectedAnswer!!, timeRemaining / 30f)
+                        hasSubmitted = true
+                    }
+                },
+                enabled = !hasSubmitted && selectedAnswer != null,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .shadow(12.dp, RoundedCornerShape(16.dp), spotColor = if (hasSubmitted) Color.Transparent else PrimaryNeonTeal),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (hasSubmitted) SurfaceCardContainer.copy(alpha = 0.5f) else PrimaryNeonTeal,
+                    disabledContainerColor = SurfaceCardContainer.copy(alpha = 0.3f)
+                ),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Text(
+                    if (hasSubmitted) "ANSWER SUBMITTED" else "SUBMIT ANSWER",
+                    color = if (hasSubmitted) Color.White.copy(alpha = 0.5f) else Color.Black,
                     fontWeight = FontWeight.Black,
                     letterSpacing = 0.5.sp
                 )
@@ -1084,18 +1417,18 @@ fun QuizSummaryView(
             .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Winner Podium Icon
+
         Box(
             modifier = Modifier
                 .size(100.dp)
                 .glassCard(shape = CircleShape, backgroundColor = SurfaceCardContainer.copy(alpha = 0.5f))
-                .cyberBorder(shape = CircleShape, borderWidth = 2.dp, startColor = SecondaryTangerine, endColor = PrimaryNeonTeal),
+                .cyberBorder(shape = CircleShape, borderWidth = 2.dp, startColor = StudyRoomSecondary, endColor = PrimaryNeonTeal),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 Icons.Default.EmojiEvents, 
                 contentDescription = null, 
-                tint = SecondaryTangerine, 
+                tint = StudyRoomSecondary, 
                 modifier = Modifier.size(54.dp)
             )
         }
@@ -1120,7 +1453,7 @@ fun QuizSummaryView(
         
         Spacer(Modifier.height(24.dp))
         
-        // Leaderboard Table
+
         Text(
             "FINAL LEADERBOARD", 
             color = Color.White.copy(alpha = 0.4f), 
@@ -1186,7 +1519,7 @@ fun QuizSummaryView(
         
         Spacer(Modifier.height(32.dp))
         
-        // Quiz Review Section
+
         Text(
             "CHALLENGE QUIZ REVIEW", 
             color = Color.White.copy(alpha = 0.4f), 
@@ -1331,7 +1664,7 @@ fun QuizSummaryView(
         
         Spacer(Modifier.height(36.dp))
         
-        // Two Navigation Buttons
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -1372,5 +1705,78 @@ fun QuizSummaryView(
         }
         
         Spacer(Modifier.height(48.dp))
+    }
+}
+@OptIn(ExperimentalAnimationApi::class)
+@Composable
+fun StudyRoomCountdownView(
+    state: StudyRoomUiState.QuizCountdown,
+    onFinished: () -> Unit
+) {
+    val context = LocalContext.current
+    var count by remember { mutableStateOf(3) }
+    var showStartText by remember { mutableStateOf(false) }
+
+    fun triggerVibration(durationMs: Long) {
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? android.os.VibratorManager
+            vibratorManager?.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            context.getSystemService(Context.VIBRATOR_SERVICE) as? android.os.Vibrator
+        }
+
+        if (vibrator != null && vibrator.hasVibrator()) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator.vibrate(android.os.VibrationEffect.createOneShot(durationMs, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(durationMs)
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        triggerVibration(70L)
+        delay(1000)
+        
+        count = 2
+        triggerVibration(70L)
+        delay(1000)
+        
+        count = 1
+        triggerVibration(70L)
+        delay(1000)
+        
+        showStartText = true
+        triggerVibration(400L)
+        delay(800)
+        
+        onFinished()
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(DeepSpaceBackground),
+        contentAlignment = Alignment.Center
+    ) {
+        AnimatedContent(
+            targetState = if (showStartText) "START!" else count.toString(),
+            transitionSpec = {
+                (fadeIn(animationSpec = tween(200, easing = EaseInQuad)) + scaleIn(initialScale = 0.3f, animationSpec = tween(300, easing = EaseOutBack))) togetherWith
+                        fadeOut(animationSpec = tween(200, easing = EaseOutQuad)) + scaleOut(targetScale = 1.8f, animationSpec = tween(200))
+            },
+            label = "countdown_animation"
+        ) { targetCount ->
+            Text(
+                text = targetCount,
+                color = if (showStartText) StudyRoomSecondary else PrimaryNeonTeal,
+                fontSize = if (showStartText) 72.sp else 120.sp,
+                fontWeight = FontWeight.ExtraBold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(16.dp)
+            )
+        }
     }
 }

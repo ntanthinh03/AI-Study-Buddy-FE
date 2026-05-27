@@ -2,7 +2,14 @@ package com.thinh.aistudybuddy.data.models
 
 import com.google.gson.annotations.SerializedName
 
-data class User(val id: String, val email: String, val fullName: String)
+data class User(
+    val id: String,
+    val email: String,
+    val fullName: String,
+    val phoneNumber: String? = null,
+    val major: String? = null,
+    val avatar: String? = null
+)
 
 data class UserProfile(
     val id: String,
@@ -22,7 +29,8 @@ data class RegisterRequest(
     val email: String,
     val password: String,
     val fullName: String,
-    val phoneNumber: String
+    val phoneNumber: String,
+    val major: String? = null
 )
 
 data class RegisterResponse(
@@ -30,6 +38,11 @@ data class RegisterResponse(
     val token: String? = null,
     val user: User? = null
 )
+
+data class SendOtpRequest(val type: String, val value: String)
+data class VerifyOtpRequest(val type: String, val value: String, val otp: String)
+data class UpdateMajorRequest(val major: String)
+data class UpdateAvatarRequest(val avatar: String)
 
 data class ForgotPasswordRequest(
     val email: String,

@@ -55,7 +55,7 @@ fun RegisterScreen(
 
     val majors = listOf("Computer Science", "Business", "Medicine", "Engineering")
 
-    // Ambient glows animations
+
     val infiniteTransition = rememberInfiniteTransition(label = "register_ambient")
     val pulseScale by infiniteTransition.animateFloat(
         initialValue = 0.9f,
@@ -101,7 +101,7 @@ fun RegisterScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Neon glowing ambient background
+
             Canvas(modifier = Modifier.fillMaxSize()) {
                 drawCircle(
                     brush = Brush.radialGradient(
@@ -151,7 +151,7 @@ fun RegisterScreen(
                 }
 
                 item {
-                    // Registration glass container
+
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -299,7 +299,7 @@ fun RegisterScreen(
 
                         Spacer(modifier = Modifier.height(30.dp))
 
-                        // Gradient Submit Button
+
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -345,6 +345,7 @@ fun RegisterScreen(
                                     registerViewModel.email = trimmedEmail
                                     registerViewModel.phoneNumber = normalizedPhone
                                     registerViewModel.password = password
+                                    registerViewModel.major = selectedMajor
                                     registerViewModel.onRegisterClick {
                                         Toast
                                             .makeText(context, "Registration Successful!", Toast.LENGTH_SHORT)

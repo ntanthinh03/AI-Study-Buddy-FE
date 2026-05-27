@@ -40,7 +40,7 @@ fun WelcomeScreen(
     var learningMode by remember { mutableStateOf("BALANCED") }
 
     LaunchedEffect(Unit) {
-        // Fetch learning mode dynamically to show matching mascot emotion
+
         runCatching {
             val resp = RetrofitClient.instance.getUserStats()
             if (resp.isSuccessful) {
@@ -51,7 +51,7 @@ fun WelcomeScreen(
         onFinished()
     }
 
-    // Elegant backdrop floating glow animations
+
     val infiniteTransition = rememberInfiniteTransition(label = "cyber_ambient")
     val pulseScale by infiniteTransition.animateFloat(
         initialValue = 0.85f,
@@ -78,9 +78,9 @@ fun WelcomeScreen(
             .background(DeepSpaceBackground),
         contentAlignment = Alignment.Center
     ) {
-        // Floating cyber orbs layer
+
         Canvas(modifier = Modifier.fillMaxSize()) {
-            // Neon teal energy center (Top-Left quadrant)
+
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(PrimaryNeonTeal.copy(alpha = 0.15f * pulseScale), Color.Transparent),
@@ -88,7 +88,7 @@ fun WelcomeScreen(
                     radius = size.width * 0.7f
                 )
             )
-            // Cosmic purple mystery center (Bottom-Right quadrant)
+
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(TertiaryCosmicIndigo.copy(alpha = 0.18f * pulseScale), Color.Transparent),
@@ -113,13 +113,13 @@ fun WelcomeScreen(
                     .padding(36.dp)
                     .fillMaxWidth()
             ) {
-                // Interactive AI Mascot
+
                 InteractiveMascot(
                     mode = learningMode,
                     modifier = Modifier.padding(bottom = 36.dp)
                 )
 
-                // Neon title with premium linear gradient and high-end glow shadow
+
                 Text(
                     text = "BUDDY APP",
                     style = MaterialTheme.typography.displayMedium.copy(
@@ -138,7 +138,7 @@ fun WelcomeScreen(
                     modifier = Modifier.padding(bottom = 12.dp)
                 )
 
-                // Sleek subtitle with premium silver-teal color and wide tracking
+
                 Text(
                     text = "AI Study",
                     style = MaterialTheme.typography.titleMedium,
@@ -147,23 +147,6 @@ fun WelcomeScreen(
                     letterSpacing = 2.5.sp,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(bottom = 32.dp)
-                )
-
-                // Tagline with elegant gold glow, comfortable vertical padding
-                Text(
-                    text = "IGNITE YOUR FOCUS • CONQUER YOUR EXAMS",
-                    style = MaterialTheme.typography.labelMedium.copy(
-                        shadow = Shadow(
-                            color = SecondaryTangerine.copy(alpha = 0.3f),
-                            offset = Offset(0f, 0f),
-                            blurRadius = 12f
-                        )
-                    ),
-                    color = SecondaryTangerine,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.2.sp,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(top = 16.dp)
                 )
             }
         }

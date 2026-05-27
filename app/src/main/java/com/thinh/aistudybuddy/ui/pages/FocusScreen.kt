@@ -61,7 +61,7 @@ fun FocusScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize().background(DeepSpaceBackground)) {
-        // Space Ambient glows
+
         val infiniteTransition = rememberInfiniteTransition(label = "focus_ambient")
         val pulseScale by infiniteTransition.animateFloat(
             initialValue = 0.9f,
@@ -135,7 +135,7 @@ fun FocusScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Canvas(modifier = Modifier.fillMaxSize()) {
-                        // Track Background
+
                         drawArc(
                             color = Color.White.copy(alpha = 0.05f),
                             startAngle = -90f,
@@ -143,7 +143,7 @@ fun FocusScreen(
                             useCenter = false,
                             style = Stroke(width = 12.dp.toPx(), cap = StrokeCap.Round)
                         )
-                        // Glowing Reactor Track
+
                         drawArc(
                             brush = Brush.sweepGradient(
                                 colors = listOf(PrimaryNeonTeal, TertiaryCosmicIndigo, PrimaryNeonTeal),

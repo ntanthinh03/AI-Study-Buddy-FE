@@ -34,6 +34,10 @@ import com.thinh.aistudybuddy.data.models.MindMapResponse
 import com.thinh.aistudybuddy.ui.theme.*
 import com.thinh.aistudybuddy.viewmodel.MindMapState
 import com.thinh.aistudybuddy.viewmodel.MindMapViewModel
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.graphics.graphicsLayer
+import com.thinh.aistudybuddy.data.models.Flashcard
+import com.thinh.aistudybuddy.viewmodel.FlashcardViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -41,13 +45,17 @@ fun MindMapScreen(
     documentId: String,
     documentName: String,
     onBack: () -> Unit,
-    viewModel: MindMapViewModel
+    viewModel: MindMapViewModel,
+    flashcardViewModel: FlashcardViewModel
 ) {
     val state = viewModel.state
     val currentMindMap = viewModel.currentMindMap
+    
+    var activeNodeForStudy by remember { mutableStateOf<MindMapNode?>(null) }
+    var conceptFlashcards by remember { mutableStateOf<List<Flashcard>?>(null) }
 
     Box(modifier = Modifier.fillMaxSize().background(DeepSpaceBackground)) {
-        // Ambient background glows
+
         val infiniteTransition = rememberInfiniteTransition(label = "mindmap_ambient")
         val pulseScale by infiniteTransition.animateFloat(
             initialValue = 0.9f,
@@ -115,12 +123,18 @@ fun MindMapScreen(
                     }
                     MindMapState.COMPLETED -> {
                         currentMindMap?.let { mindMap ->
-                            MindMapContent(mindMap.content)
+                            MindMapContent(
+                                nodes = mindMap.content,
+                                onNodeClick = { node ->
+                                    activeNodeForStudy = node
+                                    conceptFlashcards = null
+                                }
+                            )
                         }
                     }
                     MindMapState.ERROR -> {
                         ErrorState(viewModel.errorMessage ?: "Unknown error") {
-                            // Retry logic if needed (can call custom trigger or close/re-open)
+                            viewModel.generateMindMap(documentId, "Generate mind map for this document.") {}
                         }
                     }
                     MindMapState.IDLE -> {
@@ -130,6 +144,23 @@ fun MindMapScreen(
                     }
                 }
             }
+        }
+
+
+        activeNodeForStudy?.let { node ->
+            InteractiveConceptStudyBoard(
+                documentId = documentId,
+                node = node,
+                flashcardViewModel = flashcardViewModel,
+                conceptFlashcards = conceptFlashcards,
+                onFlashcardsLoaded = { cards ->
+                    conceptFlashcards = cards
+                },
+                onDismiss = {
+                    activeNodeForStudy = null
+                    conceptFlashcards = null
+                }
+            )
         }
     }
 }
@@ -227,7 +258,7 @@ fun GeneratingMindMapAnimation(message: String) {
 }
 
 @Composable
-fun MindMapContent(nodes: List<MindMapNode>) {
+fun MindMapContent(nodes: List<MindMapNode>, onNodeClick: (MindMapNode) -> Unit) {
     val rootNodes = nodes.filter { it.parentId == null }
     
     LazyColumn(
@@ -235,13 +266,13 @@ fun MindMapContent(nodes: List<MindMapNode>) {
         contentPadding = PaddingValues(bottom = 48.dp)
     ) {
         items(rootNodes) { root ->
-            MindMapBranch(root, nodes, 0)
+            MindMapBranch(root, nodes, 0, onNodeClick)
         }
     }
 }
 
 @Composable
-fun MindMapBranch(node: MindMapNode, allNodes: List<MindMapNode>, depth: Int) {
+fun MindMapBranch(node: MindMapNode, allNodes: List<MindMapNode>, depth: Int, onNodeClick: (MindMapNode) -> Unit) {
     val children = allNodes.filter { it.parentId == node.id }
     
     Column(modifier = Modifier.padding(start = (depth * 20).dp)) {
@@ -272,6 +303,7 @@ fun MindMapBranch(node: MindMapNode, allNodes: List<MindMapNode>, depth: Int) {
                         backgroundColor = nodeBg,
                         borderColor = nodeBorder
                     )
+                    .clickable { onNodeClick(node) }
             ) {
                 Text(
                     text = node.label,
@@ -284,9 +316,260 @@ fun MindMapBranch(node: MindMapNode, allNodes: List<MindMapNode>, depth: Int) {
         }
         
         children.forEach { child ->
-            MindMapBranch(child, allNodes, depth + 1)
+            MindMapBranch(child, allNodes, depth + 1, onNodeClick)
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun InteractiveConceptStudyBoard(
+    documentId: String,
+    node: MindMapNode,
+    flashcardViewModel: FlashcardViewModel,
+    conceptFlashcards: List<Flashcard>?,
+    onFlashcardsLoaded: (List<Flashcard>) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val isGenerating = flashcardViewModel.isGenerating
+    var cardIndex by remember { mutableStateOf(0) }
+    var isFlipped by remember { mutableStateOf(false) }
+
+    val rotation by animateFloatAsState(
+        targetValue = if (isFlipped) 180f else 0f,
+        animationSpec = tween(durationMillis = 500, easing = FastOutSlowInEasing),
+        label = "card_flip_rotation"
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+        containerColor = DeepSpaceBackground,
+        modifier = Modifier
+            .fillMaxWidth(0.92f)
+            .padding(16.dp)
+            .glassCard(
+                shape = RoundedCornerShape(24.dp),
+                backgroundColor = SurfaceCardContainer.copy(alpha = 0.95f),
+                borderColor = PrimaryNeonTeal
+            )
+            .cyberBorder(shape = RoundedCornerShape(24.dp), borderWidth = 2.dp),
+        confirmButton = {},
+        title = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "CONCEPT STUDY BOARD",
+                        color = PrimaryNeonTeal,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp
+                    )
+                    IconButton(onClick = onDismiss) {
+                        Text("✕", color = Color.White.copy(alpha = 0.5f), fontSize = 16.sp)
+                    }
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = node.label,
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        },
+        text = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(280.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                if (isGenerating) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        CircularProgressIndicator(color = PrimaryNeonTeal)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            "AI Study Buddy is analyzing PDF...",
+                            color = Color.White.copy(alpha = 0.7f),
+                            fontSize = 14.sp
+                        )
+                        Text(
+                            "Synthesizing active recall cards...",
+                            color = PrimaryNeonTeal,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                } else if (conceptFlashcards == null) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                        modifier = Modifier.padding(16.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AutoAwesome,
+                            contentDescription = null,
+                            tint = PrimaryNeonTeal,
+                            modifier = Modifier.size(48.dp)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Extract key facts from this subtopic and study them using 3D interactive flashcards.",
+                            color = Color.White.copy(alpha = 0.7f),
+                            textAlign = TextAlign.Center,
+                            fontSize = 13.sp
+                        )
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Button(
+                            onClick = {
+                                flashcardViewModel.generateFlashcardsByTopic(documentId, node.label) { result ->
+                                    if (result != null) {
+                                        onFlashcardsLoaded(result)
+                                    }
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryNeonTeal),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .cyberBorder(shape = RoundedCornerShape(12.dp), borderWidth = 1.dp)
+                        ) {
+                            Text("COMPILE CONCEPT CARDS", color = Color.Black, fontWeight = FontWeight.ExtraBold)
+                        }
+                    }
+                } else {
+                    if (conceptFlashcards.isEmpty()) {
+                        Text(
+                            text = "AI couldn't generate cards for this specific concept. Try another subtopic!",
+                            color = Color.White.copy(alpha = 0.6f),
+                            textAlign = TextAlign.Center
+                        )
+                    } else {
+                        val card = conceptFlashcards[cardIndex]
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f)
+                                    .padding(vertical = 8.dp)
+                                    .graphicsLayer {
+                                        rotationY = rotation
+                                        cameraDistance = 8 * density
+                                    }
+                                    .clickable { isFlipped = !isFlipped }
+                                    .glassCard(
+                                        shape = RoundedCornerShape(16.dp),
+                                        backgroundColor = if (rotation <= 90f) SurfaceCardContainer.copy(alpha = 0.8f) else TertiaryCosmicIndigo.copy(alpha = 0.2f),
+                                        borderColor = if (rotation <= 90f) PrimaryNeonTeal.copy(alpha = 0.5f) else TertiaryCosmicIndigo
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (rotation <= 90f) {
+                                    Column(
+                                        modifier = Modifier.padding(16.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Text(
+                                            "FRONT (Tap to flip)",
+                                            color = PrimaryNeonTeal.copy(alpha = 0.6f),
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Text(
+                                            text = card.front,
+                                            color = Color.White,
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            textAlign = TextAlign.Center
+                                        )
+                                    }
+                                } else {
+                                    Column(
+                                        modifier = Modifier
+                                            .padding(16.dp)
+                                            .graphicsLayer {
+                                                rotationY = 180f
+                                            },
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Text(
+                                            "BACK (Answer / Definition)",
+                                            color = TertiaryCosmicIndigo.copy(alpha = 0.8f),
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Text(
+                                            text = card.back,
+                                            color = Color.White,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            textAlign = TextAlign.Center
+                                        )
+                                    }
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Button(
+                                    onClick = {
+                                        if (cardIndex > 0) {
+                                            cardIndex--
+                                            isFlipped = false
+                                        }
+                                    },
+                                    enabled = cardIndex > 0,
+                                    colors = ButtonDefaults.buttonColors(containerColor = SurfaceCardContainer)
+                                ) {
+                                    Text("Prev", color = Color.White)
+                                }
+                                
+                                Text(
+                                    text = "CARD ${cardIndex + 1}/${conceptFlashcards.size}",
+                                    color = Color.White.copy(alpha = 0.6f),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+
+                                Button(
+                                    onClick = {
+                                        if (cardIndex < conceptFlashcards.size - 1) {
+                                            cardIndex++
+                                            isFlipped = false
+                                        }
+                                    },
+                                    enabled = cardIndex < conceptFlashcards.size - 1,
+                                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryNeonTeal)
+                                ) {
+                                    Text("Next", color = Color.Black, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    )
 }
 
 @Composable

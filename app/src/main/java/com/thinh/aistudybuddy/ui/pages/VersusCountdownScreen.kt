@@ -34,7 +34,7 @@ fun VersusCountdownScreen(
     var count by remember { mutableStateOf(3) }
     var showStartText by remember { mutableStateOf(false) }
 
-    // Trigger vibrator based on standard android compat
+
     fun triggerVibration(durationMs: Long) {
         val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
@@ -55,23 +55,23 @@ fun VersusCountdownScreen(
     }
 
     LaunchedEffect(Unit) {
-        // Count 3
+
         triggerVibration(70L)
         delay(1000)
         
-        // Count 2
+
         count = 2
         triggerVibration(70L)
         delay(1000)
         
-        // Count 1
+
         count = 1
         triggerVibration(70L)
         delay(1000)
         
-        // START!
+
         showStartText = true
-        triggerVibration(400L) // Heavy feedback vibration
+        triggerVibration(400L)
         delay(800)
         
         onFinished(matchId)

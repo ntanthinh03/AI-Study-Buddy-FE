@@ -37,7 +37,7 @@ fun FireworksEffect() {
                 angle = Random.nextFloat() * 2 * Math.PI.toFloat(),
                 speed = Random.nextFloat() * 18f + 6f,
                 color = Color(
-                    red = Random.nextFloat() * 0.4f + 0.6f, // warm neon tones
+                    red = Random.nextFloat() * 0.4f + 0.6f,
                     green = Random.nextFloat() * 0.8f + 0.2f,
                     blue = Random.nextFloat() * 0.9f + 0.1f,
                     alpha = 1f
@@ -94,7 +94,7 @@ fun QuizResultScreen(
     )
 
     Box(modifier = Modifier.fillMaxSize().background(DeepSpaceBackground)) {
-        // Space backgrounds
+
         val glowTransition = rememberInfiniteTransition(label = "result_glow")
         val pulseScale by glowTransition.animateFloat(
             initialValue = 0.9f,
@@ -192,7 +192,7 @@ fun QuizResultScreen(
 
             Spacer(modifier = Modifier.height(40.dp))
 
-            // Subtitle mapping info
+
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.AutoAwesome, null, tint = PrimaryNeonTeal, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(8.dp))

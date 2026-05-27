@@ -6,8 +6,10 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.thinh.aistudybuddy.services.ApiService
+import com.thinh.aistudybuddy.services.network.RetrofitClient
 import com.thinh.aistudybuddy.data.models.MindMapCreateRequest
 import com.thinh.aistudybuddy.data.models.MindMapResponse
+import retrofit2.HttpException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -36,7 +38,6 @@ class MindMapViewModel(private val apiService: ApiService) : ViewModel() {
             state = MindMapState.GENERATING
             errorMessage = null
             
-            
             val messageJob = launch {
                 for (msg in generatingMessages) {
                     generatingMessage = msg
@@ -45,6 +46,21 @@ class MindMapViewModel(private val apiService: ApiService) : ViewModel() {
             }
 
             try {
+
+                val history = apiService.getMindMaps()
+                val existing = history.find { it.documentId == documentId }
+                
+                if (existing != null) {
+                    val detail = apiService.getMindMapDetail(existing.id)
+                    messageJob.cancel()
+                    currentMindMap = detail
+                    state = MindMapState.COMPLETED
+                    onComplete()
+                    mindMapHistory = history
+                    return@launch
+                }
+
+
                 val response = apiService.generateMindMap(MindMapCreateRequest(documentId, text))
                 messageJob.cancel()
                 currentMindMap = response
@@ -54,7 +70,12 @@ class MindMapViewModel(private val apiService: ApiService) : ViewModel() {
             } catch (e: Exception) {
                 messageJob.cancel()
                 state = MindMapState.ERROR
-                errorMessage = e.message ?: "Failed to generate mind map"
+                errorMessage = if (e is HttpException && e.code() == 401) {
+                    RetrofitClient.updateAuthToken(null)
+                    "HTTP 401 Unauthorized"
+                } else {
+                    e.message ?: "Failed to generate mind map"
+                }
             }
         }
     }

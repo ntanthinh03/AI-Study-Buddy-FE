@@ -27,6 +27,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.style.TextAlign
 import com.thinh.aistudybuddy.ui.theme.*
 import com.thinh.aistudybuddy.viewmodel.QuizViewModel
 
@@ -42,6 +44,26 @@ fun QuizScreen(
     var unansweredText by remember { mutableStateOf("") }
 
     if (viewModel.isGeneratingQuiz) {
+        val infiniteTransition = rememberInfiniteTransition(label = "waiting_for_host_anim")
+        val scale by infiniteTransition.animateFloat(
+            initialValue = 0.85f,
+            targetValue = 1.15f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(2000, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "scale"
+        )
+        val rotation by infiniteTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = 360f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(8000, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "rotation"
+        )
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -50,26 +72,56 @@ fun QuizScreen(
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier.padding(32.dp)
             ) {
-                CircularProgressIndicator(
-                    color = PrimaryNeonTeal,
-                    strokeWidth = 4.dp,
-                    modifier = Modifier.size(56.dp)
-                )
-                Spacer(modifier = Modifier.height(24.dp))
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(200.dp)) {
+                    Canvas(
+                        modifier = Modifier
+                            .size(160.dp)
+                            .graphicsLayer(rotationZ = rotation)
+                    ) {
+                        drawArc(
+                            brush = Brush.sweepGradient(listOf(PrimaryNeonTeal, TertiaryCosmicIndigo, PrimaryNeonTeal)),
+                            startAngle = 0f,
+                            sweepAngle = 360f,
+                            useCenter = false,
+                            style = androidx.compose.ui.graphics.drawscope.Stroke(
+                                width = 4.dp.toPx(),
+                                cap = androidx.compose.ui.graphics.StrokeCap.Round
+                            )
+                        )
+                    }
+
+                    InteractiveMascot(
+                        mode = "BALANCED",
+                        modifier = Modifier
+                            .graphicsLayer(scaleX = scale, scaleY = scale)
+                            .size(100.dp)
+                            .offset(y = 12.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(48.dp))
+
                 Text(
                     text = "Forging quiz questions...",
                     color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
-                    letterSpacing = 0.5.sp
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 22.sp,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 32.sp
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+
+                Spacer(modifier = Modifier.height(16.dp))
+
                 Text(
-                    text = "Analyzing key concepts in document",
-                    color = Color.Gray,
-                    fontSize = 13.sp
+                    text = "Analyzing key concepts and reading PDF document under the hood.",
+                    color = Color.White.copy(alpha = 0.4f),
+                    textAlign = TextAlign.Center,
+                    fontSize = 14.sp,
+                    modifier = Modifier.padding(horizontal = 24.dp),
+                    lineHeight = 20.sp
                 )
             }
         }
@@ -173,6 +225,7 @@ fun QuizScreen(
             confirmButton = {
                 TextButton(onClick = {
                     showUnansweredDialog = false
+                    viewModel.calculateFinalScore()
                     showResultScreen = true
                 }) { Text("SUBMIT", color = PrimaryNeonTeal, fontWeight = FontWeight.Bold) }
             },
@@ -186,11 +239,11 @@ fun QuizScreen(
     }
 
     val currentIdx = viewModel.currentQuestionIndex
-    val isSubmitted = viewModel.submittedQuestions[currentIdx] || isReviewMode
+    val isCorrectShown = isReviewMode
     val hasSelected = viewModel.userAnswers[currentIdx] != -1
 
     Box(modifier = Modifier.fillMaxSize().background(DeepSpaceBackground)) {
-        // Space Ambient glows
+
         val infiniteTransition = rememberInfiniteTransition(label = "quiz_ambient")
         val pulseScale by infiniteTransition.animateFloat(
             initialValue = 0.9f,
@@ -235,7 +288,7 @@ fun QuizScreen(
         ) {
             Spacer(modifier = Modifier.height(12.dp))
             
-            // Header navigation panel
+
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(
                     onClick = if (isReviewMode) { { isReviewMode = false } } else onCloseClick,
@@ -254,8 +307,6 @@ fun QuizScreen(
                     )
                     if (viewModel.isLoadingMoreQuestions) {
                         Text("Synthesizing more questions...", color = PrimaryNeonTeal.copy(alpha = 0.8f), fontSize = 11.sp)
-                    } else {
-                        Text("${viewModel.questions.size} Questions Total", color = Color.White.copy(alpha = 0.4f), fontSize = 11.sp)
                     }
                 }
                 Box(contentAlignment = Alignment.Center, modifier = Modifier.size(52.dp)) {
@@ -272,7 +323,7 @@ fun QuizScreen(
             Spacer(Modifier.height(28.dp))
 
             if (viewModel.questions.isNotEmpty()) {
-                // Question text glass container
+
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -304,7 +355,7 @@ fun QuizScreen(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Options list
+
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.weight(1f)) {
                     itemsIndexed(viewModel.currentQuestion.options) { index, option ->
                         val key = when(index) { 0 -> "A"; 1 -> "B"; 2 -> "C"; else -> "D" }
@@ -312,8 +363,8 @@ fun QuizScreen(
                         val isCorrect = index == viewModel.currentQuestion.correctAnswerIndex
 
                         val (bgColor, borderColor) = when {
-                            isSubmitted && isCorrect -> Pair(EmeraldSuccess.copy(alpha = 0.12f), EmeraldSuccess)
-                            isSubmitted && isSelected && !isCorrect -> Pair(RoseWarning.copy(alpha = 0.12f), RoseWarning)
+                            isCorrectShown && isCorrect -> Pair(EmeraldSuccess.copy(alpha = 0.12f), EmeraldSuccess)
+                            isCorrectShown && isSelected && !isCorrect -> Pair(RoseWarning.copy(alpha = 0.12f), RoseWarning)
                             isSelected -> Pair(PrimaryNeonTeal.copy(alpha = 0.15f), PrimaryNeonTeal)
                             else -> Pair(SurfaceCardContainer.copy(alpha = 0.5f), Color.Transparent)
                         }
@@ -330,7 +381,7 @@ fun QuizScreen(
                                     backgroundColor = bgColor,
                                     borderColor = Color(0x1Fffffff)
                                 )
-                                .clickable(enabled = !isSubmitted) { viewModel.selectOption(index) }
+                                .clickable(enabled = !isCorrectShown) { viewModel.selectOption(index) }
                         ) {
                             Row(modifier = Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Box(
@@ -339,8 +390,8 @@ fun QuizScreen(
                                         .clip(CircleShape)
                                         .background(
                                             when {
-                                                isSubmitted && isCorrect -> EmeraldSuccess
-                                                isSubmitted && isSelected && !isCorrect -> RoseWarning
+                                                isCorrectShown && isCorrect -> EmeraldSuccess
+                                                isCorrectShown && isSelected && !isCorrect -> RoseWarning
                                                 isSelected -> PrimaryNeonTeal
                                                 else -> SurfaceContainerHigh
                                             }
@@ -349,14 +400,14 @@ fun QuizScreen(
                                 ) {
                                     Text(
                                         key,
-                                        color = if (isSelected || (isSubmitted && isCorrect)) Color.Black else Color.White.copy(alpha = 0.6f),
+                                        color = if (isSelected || (isCorrectShown && isCorrect)) Color.Black else Color.White.copy(alpha = 0.6f),
                                         fontWeight = FontWeight.ExtraBold
                                     )
                                 }
                                 Spacer(Modifier.width(16.dp))
                                 Text(option, color = Color.White, fontSize = 15.sp, modifier = Modifier.weight(1f))
 
-                                if (isSubmitted) {
+                                if (isCorrectShown) {
                                     if (isCorrect) Icon(Icons.Default.CheckCircle, null, tint = EmeraldSuccess)
                                     else if (isSelected) Icon(Icons.Default.Close, null, tint = RoseWarning)
                                 }
@@ -364,7 +415,7 @@ fun QuizScreen(
                         }
                     }
 
-                    if (isSubmitted) {
+                    if (isCorrectShown) {
                         item {
                             Box(
                                 modifier = Modifier
@@ -391,7 +442,7 @@ fun QuizScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Footer navigation buttons
+
             if (isReviewMode) {
                 Button(
                     onClick = { isReviewMode = false },
@@ -423,40 +474,35 @@ fun QuizScreen(
                     val isLast = currentIdx == viewModel.questions.size - 1
                     Button(
                         onClick = {
-                            when {
-                                hasSelected && !isSubmitted -> viewModel.submitAnswer()
-                                isLast -> {
-                                    val unanswered = viewModel.getUnansweredQuestions()
-                                    if (unanswered.isNotEmpty()) {
-                                        unansweredText = unanswered.joinToString(", ") { "#$it" }
-                                        showUnansweredDialog = true
-                                    } else {
-                                        showResultScreen = true
-                                    }
+                            if (isLast) {
+                                val unanswered = viewModel.getUnansweredQuestions()
+                                if (unanswered.isNotEmpty()) {
+                                    unansweredText = unanswered.joinToString(", ") { "#$it" }
+                                    showUnansweredDialog = true
+                                } else {
+                                    viewModel.calculateFinalScore()
+                                    showResultScreen = true
                                 }
-                                else -> viewModel.nextQuestion()
+                            } else {
+                                viewModel.nextQuestion()
                             }
                         },
                         modifier = Modifier
                             .weight(1f)
                             .height(56.dp)
                             .then(
-                                if (isLast || (hasSelected && !isSubmitted)) Modifier.cyberBorder(shape = RoundedCornerShape(16.dp), borderWidth = 1.5.dp)
+                                if (isLast) Modifier.cyberBorder(shape = RoundedCornerShape(16.dp), borderWidth = 1.5.dp)
                                 else Modifier
                             ),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = if (isLast || (hasSelected && !isSubmitted)) PrimaryNeonTeal else SurfaceContainerHigh.copy(alpha = 0.6f)
+                            containerColor = if (isLast) PrimaryNeonTeal else SurfaceContainerHigh.copy(alpha = 0.6f)
                         ),
                         shape = RoundedCornerShape(16.dp)
                     ) {
-                        val text = when {
-                            hasSelected && !isSubmitted -> "SUBMIT"
-                            isLast -> "FINISH"
-                            else -> "NEXT"
-                        }
+                        val text = if (isLast) "FINISH" else "NEXT"
                         Text(
                             text = text,
-                            color = if (isLast || (hasSelected && !isSubmitted)) Color.Black else Color.White,
+                            color = if (isLast) Color.Black else Color.White,
                             fontWeight = FontWeight.ExtraBold,
                             letterSpacing = 1.sp
                         )

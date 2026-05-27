@@ -58,7 +58,7 @@ fun MockExamScreen(
     var showExitDialog by remember { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize().background(DeepSpaceBackground)) {
-        // Space Ambient glows
+
         val infiniteTransition = rememberInfiniteTransition(label = "exam_ambient")
         val pulseScale by infiniteTransition.animateFloat(
             initialValue = 0.9f,
@@ -122,7 +122,7 @@ fun MockExamScreen(
                 when (val state = uiState) {
                     is MockExamUiState.Initial -> {
                         Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
-                            // Section description card
+
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -283,7 +283,7 @@ fun InProgressView(state: MockExamUiState.InProgress, viewModel: MockExamViewMod
 
         Spacer(Modifier.height(28.dp))
 
-        // Question Glass Card
+
         Box(
             modifier = Modifier
                 .fillMaxWidth()

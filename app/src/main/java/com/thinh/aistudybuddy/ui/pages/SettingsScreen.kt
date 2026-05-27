@@ -38,7 +38,7 @@ fun SettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
 
     Box(modifier = Modifier.fillMaxSize().background(DeepSpaceBackground)) {
-        // Space Ambient glows
+
         val infiniteTransition = rememberInfiniteTransition(label = "settings_ambient")
         val pulseScale by infiniteTransition.animateFloat(
             initialValue = 0.9f,
@@ -251,7 +251,38 @@ fun SettingsScreen(onBack: () -> Unit) {
                 SettingsItem(Icons.Default.Info, "App Version", "v1.0.2")
                 SettingsItem(Icons.Default.Description, "Terms & Privacy Policy", "View terms and agreements")
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp)
+                        .glassCard(shape = RoundedCornerShape(12.dp), backgroundColor = RoseWarning.copy(alpha = 0.05f))
+                        .border(1.dp, RoseWarning.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(RoseWarning.copy(alpha = 0.15f), CircleShape)
+                                .border(0.5.dp, RoseWarning.copy(alpha = 0.4f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.ErrorOutline, null, tint = RoseWarning, modifier = Modifier.size(18.dp))
+                        }
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column {
+                            Text("System Error & Feedback", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text("Report crashes or DB sync issues to: ntanthinh03@gmail.com", color = Color.White.copy(alpha = 0.6f), fontSize = 11.sp)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
 
                 Text(
                     text = "FEBuddy AI System by ThinhNguyen",

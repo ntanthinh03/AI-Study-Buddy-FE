@@ -70,7 +70,7 @@ fun ChatDrawer(
                 .fillMaxSize()
                 .padding(20.dp)
         ) {
-            // Cyber Search Bar
+
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = onSearchQueryChange,
@@ -105,11 +105,11 @@ fun ChatDrawer(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Navigation Links / Core Actions
+
             Column(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // New Chat Button (Prominent gradient call-to-action)
+
                 if (searchQuery.isBlank() || "New Chat".contains(searchQuery, ignoreCase = true)) {
                     Box(
                         modifier = Modifier
@@ -147,7 +147,7 @@ fun ChatDrawer(
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
-                // Daily study session (streak item)
+
                 if (searchQuery.isBlank() || "Daily Study Session".contains(searchQuery, ignoreCase = true)) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -191,7 +191,7 @@ fun ChatDrawer(
                     }
                 }
 
-                // Co-study rooms (multiplayer lobby)
+
                 if (searchQuery.isBlank() || "Co-Study Rooms".contains(searchQuery, ignoreCase = true)) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -233,7 +233,7 @@ fun ChatDrawer(
                     }
                 }
 
-                // Other Standard Utilities in grid-like rows or list
+
                 val itemsList = listOf(
                     Triple("Flashcards Study", Icons.Default.ViewCarousel, onFlashcardsClick),
                     Triple("Study Analytics", Icons.Default.Insights, onAnalyticsClick),
@@ -274,7 +274,7 @@ fun ChatDrawer(
             HorizontalDivider(color = Color.White.copy(alpha = 0.08f), thickness = 1.dp)
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Conversations List Label
+
             Text(
                 text = "RECENT CONVERSATIONS",
                 color = Color.White.copy(alpha = 0.4f),
@@ -284,7 +284,7 @@ fun ChatDrawer(
                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)
             )
 
-            // Conversations Scroll List
+
             LazyColumn(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -320,8 +320,8 @@ fun ChatDrawer(
                         }
                     }
                 } else {
-                    // Regular Active Conversations
-                    items(conversations, key = { it.id }) { conversation ->
+
+                    items(conversations) { conversation ->
                         val isActive = conversation.id == activeConversationId
 
                         val typeIcon = when (conversation.kind) {
@@ -406,7 +406,7 @@ fun ChatDrawer(
                         }
                     }
 
-                    // Pending Conversations
+
                     if (pendingConversations.isNotEmpty()) {
                         item {
                             Spacer(modifier = Modifier.height(12.dp))
@@ -419,7 +419,7 @@ fun ChatDrawer(
                             )
                         }
 
-                        items(pendingConversations, key = { it.id }) { conversation ->
+                        items(pendingConversations) { conversation ->
                             val isActive = conversation.id == activeConversationId
                             val typeIcon = when (conversation.kind) {
                                 ConversationKind.QUIZ -> Icons.Default.Quiz
@@ -488,7 +488,7 @@ fun ChatDrawer(
             HorizontalDivider(color = Color.White.copy(alpha = 0.08f), thickness = 1.dp)
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Premium Profile Bottom Area (styled as an extra rich glass card panel)
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -517,12 +517,7 @@ fun ChatDrawer(
                         fontWeight = FontWeight.Bold,
                         maxLines = 1
                     )
-                    Text(
-                        text = "Premium Plan",
-                        color = SecondaryTangerine,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
+
                 }
 
                 IconButton(
@@ -539,4 +534,4 @@ fun ChatDrawer(
             }
         }
     }
-}
+}

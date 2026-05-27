@@ -58,7 +58,18 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
     ) {
         composable("welcome") {
             WelcomeScreen(onFinished = {
-                navController.navigate("login") { popUpTo("welcome") { inclusive = true } }
+                val hasToken = !RetrofitClient.authToken.isNullOrBlank()
+                if (hasToken) {
+                    chatViewModel.setDebugAccountIdentity(displayName)
+                    chatViewModel.markNewChatLandingAfterLogin()
+                    navController.navigate("chat") {
+                        popUpTo("welcome") { inclusive = true }
+                    }
+                } else {
+                    navController.navigate("login") {
+                        popUpTo("welcome") { inclusive = true }
+                    }
+                }
             })
         }
         composable("login") {
@@ -285,7 +296,8 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
                 documentId = documentId,
                 documentName = documentName,
                 onBack = { navController.popBackStack() },
-                viewModel = mindMapViewModel
+                viewModel = mindMapViewModel,
+                flashcardViewModel = flashcardViewModel
             )
         }
         composable("settings") { SettingsScreen(onBack = { navController.popBackStack() }) }

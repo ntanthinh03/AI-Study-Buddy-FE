@@ -26,3 +26,8 @@ data class CreateFlashcardRequest(
     val front: String,
     val back: String
 )
+
+data class FlashcardTopicRequest(
+    val documentId: String,
+    val topic: String
+)

@@ -64,13 +64,13 @@ fun FlashcardReviewScreen(
         }
     }
 
-    // Reset rotation when card changes
+
     LaunchedEffect(currentIndex) {
         rotated = false
     }
 
     Box(modifier = Modifier.fillMaxSize().background(DeepSpaceBackground)) {
-        // Space Ambient glows
+
         val infiniteTransition = rememberInfiniteTransition(label = "review_ambient")
         val pulseScale by infiniteTransition.animateFloat(
             initialValue = 0.9f,
@@ -128,7 +128,7 @@ fun FlashcardReviewScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                // Streak Counter
+
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier
@@ -151,7 +151,7 @@ fun FlashcardReviewScreen(
                                     )
                                 }
 
-                                // Profile Avatar Glow
+
                                 Box(
                                     modifier = Modifier
                                         .size(32.dp)
@@ -318,7 +318,7 @@ fun FlashcardReviewScreen(
                         )
                     }, label = "card_transition") { _ ->
 
-                    // Leitner variables derived beautifully
+
                     val rawFileName = card.document?.fileName ?: "Personal Collection"
                     val docDisplayName = rawFileName.substringBeforeLast(".")
                     val categoryHeader = docDisplayName.uppercase()
@@ -331,7 +331,7 @@ fun FlashcardReviewScreen(
                     ) {
                         Spacer(Modifier.height(12.dp))
 
-                        // Category & Session indicators
+
                         Text(
                             text = "$categoryHeader • DYNAMIC SRS",
                             color = PrimaryNeonTeal.copy(alpha = 0.7f),
@@ -353,7 +353,7 @@ fun FlashcardReviewScreen(
 
                         Spacer(Modifier.height(12.dp))
 
-                        // Progress Text and Bar
+
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -383,7 +383,7 @@ fun FlashcardReviewScreen(
                             trackColor = SurfaceContainerLowest
                         )
 
-                        // Glassmorphic Card Container (animated between cards)
+
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -423,7 +423,7 @@ fun FlashcardReviewScreen(
                                             horizontalAlignment = Alignment.CenterHorizontally,
                                             verticalArrangement = Arrangement.SpaceBetween
                                         ) {
-                                            // Top card type tag
+
                                             Row(
                                                 verticalAlignment = Alignment.CenterVertically,
                                                 horizontalArrangement = Arrangement.Center,
@@ -446,7 +446,7 @@ fun FlashcardReviewScreen(
                                                 )
                                             }
 
-                                            // Main Question text
+
                                             Text(
                                                 text = card.front,
                                                 color = Color.White,
@@ -457,7 +457,7 @@ fun FlashcardReviewScreen(
                                                 modifier = Modifier.padding(horizontal = 8.dp)
                                             )
 
-                                            // Footer hint
+
                                             Row(
                                                 verticalAlignment = Alignment.CenterVertically,
                                                 horizontalArrangement = Arrangement.Center,
@@ -479,7 +479,7 @@ fun FlashcardReviewScreen(
                                             }
                                         }
                                     } else {
-                                        // Back Side (Answer)
+
                                         Column(
                                             modifier = Modifier
                                                 .fillMaxSize()
@@ -487,7 +487,7 @@ fun FlashcardReviewScreen(
                                             horizontalAlignment = Alignment.CenterHorizontally,
                                             verticalArrangement = Arrangement.SpaceBetween
                                         ) {
-                                            // Top card type tag
+
                                             Row(
                                                 verticalAlignment = Alignment.CenterVertically,
                                                 horizontalArrangement = Arrangement.Center,
@@ -510,7 +510,7 @@ fun FlashcardReviewScreen(
                                                 )
                                             }
 
-                                            // Main Answer text
+
                                             Text(
                                                 text = card.back,
                                                 color = PrimaryNeonTeal,
@@ -521,7 +521,7 @@ fun FlashcardReviewScreen(
                                                 modifier = Modifier.padding(horizontal = 8.dp)
                                             )
 
-                                            // Footer hint
+
                                             Row(
                                                 verticalAlignment = Alignment.CenterVertically,
                                                 horizontalArrangement = Arrangement.Center,
@@ -547,14 +547,14 @@ fun FlashcardReviewScreen(
                             }
                         }
 
-                        // SRS Feedback Controls
+
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(bottom = 14.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            // NEED REVIEW BUTTON
+
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
@@ -592,7 +592,7 @@ fun FlashcardReviewScreen(
                                 }
                             }
 
-                            // GOT IT BUTTON
+
                             Box(
                                 modifier = Modifier
                                     .weight(1.5f)

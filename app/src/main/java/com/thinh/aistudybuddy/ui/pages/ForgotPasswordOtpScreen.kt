@@ -96,7 +96,7 @@ fun ForgotPasswordOtpScreen(
         }
     }
 
-    // Ambient floating canvas glows
+
     val infiniteTransition = rememberInfiniteTransition(label = "otp_ambient")
     val pulseScale by infiniteTransition.animateFloat(
         initialValue = 0.9f,
@@ -140,7 +140,7 @@ fun ForgotPasswordOtpScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Background ambient canvas circles
+
             Canvas(modifier = Modifier.fillMaxSize()) {
                 drawCircle(
                     brush = Brush.radialGradient(
@@ -190,7 +190,7 @@ fun ForgotPasswordOtpScreen(
                 }
 
                 item {
-                    // Glass card container
+
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -241,7 +241,7 @@ fun ForgotPasswordOtpScreen(
 
                         Spacer(modifier = Modifier.height(28.dp))
 
-                        // Gradient Submit Button
+
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -275,7 +275,7 @@ fun ForgotPasswordOtpScreen(
 
                         Spacer(modifier = Modifier.height(14.dp))
 
-                        // Resend Button styled beautifully
+
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()

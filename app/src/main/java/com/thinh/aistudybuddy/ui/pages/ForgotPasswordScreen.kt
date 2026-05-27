@@ -40,7 +40,7 @@ fun ForgotPasswordScreen(
     var email by remember { mutableStateOf("") }
     var emailError by remember { mutableStateOf<String?>(null) }
 
-    // Ambient floating canvas glows
+
     val infiniteTransition = rememberInfiniteTransition(label = "forgot_ambient")
     val pulseScale by infiniteTransition.animateFloat(
         initialValue = 0.9f,
@@ -84,7 +84,7 @@ fun ForgotPasswordScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Background Neon floating Canvas orbs
+
             Canvas(modifier = Modifier.fillMaxSize()) {
                 drawCircle(
                     brush = Brush.radialGradient(
@@ -134,7 +134,7 @@ fun ForgotPasswordScreen(
                 }
 
                 item {
-                    // Glass Card Wrapper
+
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -175,7 +175,7 @@ fun ForgotPasswordScreen(
 
                         Spacer(modifier = Modifier.height(24.dp))
 
-                        // Gradient Action Button
+
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()

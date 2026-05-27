@@ -52,7 +52,7 @@ fun ChangePasswordScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize().background(DeepSpaceBackground)) {
-        // Space Ambient glows
+
         val infiniteTransition = rememberInfiniteTransition(label = "change_password_ambient")
         val pulseScale by infiniteTransition.animateFloat(
             initialValue = 0.9f,

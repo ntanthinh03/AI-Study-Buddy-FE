@@ -51,28 +51,28 @@ import kotlinx.coroutines.launch
 fun VersusMatchmakingScreen(
     initialDocumentId: String?,
     onBack: () -> Unit,
-    onMatchFound: (String, Boolean) -> Unit // returns matchId and isGuest flag
+    onMatchFound: (String, Boolean) -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val clipboardManager = LocalClipboardManager.current
 
-    // Screen States: "SELECT_MODE", "BOT_DIFFICULTY", "SELECT_DOC", "RADAR_SEARCH", "LOBBY_ROOM", "JOIN_ROOM"
+
     var screenState by remember { mutableStateOf("SELECT_MODE") }
 
     var documents by remember { mutableStateOf<List<Document>>(emptyList()) }
     var selectedDocId by remember { mutableStateOf(initialDocumentId) }
-    var selectedMode by remember { mutableStateOf("BOT") } // "BOT", "PVP", "LOBBY"
-    var botDifficulty by remember { mutableStateOf("MEDIUM") } // "EASY", "MEDIUM", "HARD"
+    var selectedMode by remember { mutableStateOf("BOT") }
+    var botDifficulty by remember { mutableStateOf("MEDIUM") }
 
-    // Search animation states
+
     var isSearching by remember { mutableStateOf(false) }
     var searchStateText by remember { mutableStateOf("Connecting neural synapses...") }
     var matchedName by remember { mutableStateOf("") }
     var matchedElo by remember { mutableStateOf(1200) }
     var showMatchFoundBadge by remember { mutableStateOf(false) }
 
-    // Lobby States
+
     var currentMatchId by remember { mutableStateOf<String?>(null) }
     var lobbyRoomCode by remember { mutableStateOf("") }
     var lobbyHostName by remember { mutableStateOf("Host") }
@@ -82,16 +82,16 @@ fun VersusMatchmakingScreen(
     var lobbyStatus by remember { mutableStateOf("LOBBY") }
     var isHost by remember { mutableStateOf(true) }
 
-    // Join Code state
+
     var joinRoomCodeInput by remember { mutableStateOf("") }
     var isJoiningRoom by remember { mutableStateOf(false) }
 
-    // Lockout States
+
     var activeLockoutSeconds by remember { mutableStateOf(0L) }
     var warningsCount by remember { mutableStateOf(0) }
     var isCheckingLockout by remember { mutableStateOf(true) }
 
-    // Fetch Lockout status
+
     LaunchedEffect(Unit) {
         isCheckingLockout = true
         runCatching {
@@ -106,7 +106,7 @@ fun VersusMatchmakingScreen(
         isCheckingLockout = false
     }
 
-    // Lockout Countdown
+
     LaunchedEffect(activeLockoutSeconds) {
         if (activeLockoutSeconds > 0) {
             var secs = activeLockoutSeconds
@@ -118,7 +118,7 @@ fun VersusMatchmakingScreen(
         }
     }
 
-    // Fetch documents
+
     LaunchedEffect(screenState) {
         if (screenState == "SELECT_DOC" && documents.isEmpty()) {
             runCatching {
@@ -129,7 +129,7 @@ fun VersusMatchmakingScreen(
         }
     }
 
-    // Lobby Polling Effect
+
     LaunchedEffect(currentMatchId, screenState) {
         if (currentMatchId != null && screenState == "LOBBY_ROOM") {
             while (currentMatchId != null && screenState == "LOBBY_ROOM") {
@@ -143,7 +143,7 @@ fun VersusMatchmakingScreen(
                         lobbyHostName = data.hostName ?: "Host"
                         lobbyHostElo = data.hostElo ?: 1200
 
-                        // Guest auto-navigation when Host starts the game
+
                         if (!isHost && (data.status == "GENERATING_INITIAL" || data.status == "IN_PROGRESS")) {
                             onMatchFound(currentMatchId!!, true)
                             return@LaunchedEffect
@@ -155,7 +155,7 @@ fun VersusMatchmakingScreen(
         }
     }
 
-    // Radar Scanning Simulated Effect
+
     suspend fun triggerRadarSearch(docId: String, mode: String) {
         screenState = "RADAR_SEARCH"
         isSearching = true
@@ -201,7 +201,7 @@ fun VersusMatchmakingScreen(
             )
             if (resp.isSuccessful && resp.body() != null) {
                 val matchId = resp.body()!!.id
-                onMatchFound(matchId, false) // matches are started as Host for Bot/PVP instant modes
+                onMatchFound(matchId, false)
                 true
             } else false
         }.getOrDefault(false)
@@ -213,7 +213,7 @@ fun VersusMatchmakingScreen(
         }
     }
 
-    // Room creation method
+
     fun createLobbyRoom() {
         scope.launch {
             runCatching {
@@ -236,7 +236,7 @@ fun VersusMatchmakingScreen(
         }
     }
 
-    // Room join method
+
     fun joinLobbyRoom(code: String) {
         if (code.length != 6) {
             Toast.makeText(context, "Enter a valid 6-digit room code", Toast.LENGTH_SHORT).show()
@@ -266,7 +266,7 @@ fun VersusMatchmakingScreen(
         }
     }
 
-    // Host room start game
+
     fun startLobbyMatch(docId: String) {
         if (currentMatchId == null) return
         scope.launch {
@@ -286,7 +286,7 @@ fun VersusMatchmakingScreen(
         }
     }
 
-    // Radar Concentrical Ripples Animations
+
     val infiniteTransition = rememberInfiniteTransition(label = "ripples")
     val radarScale1 by infiniteTransition.animateFloat(
         initialValue = 0f,
@@ -327,7 +327,7 @@ fun VersusMatchmakingScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize().background(DeepSpaceBackground)) {
-        // Space Ambient background
+
         Canvas(modifier = Modifier.fillMaxSize()) {
             drawCircle(
                 brush = Brush.radialGradient(
@@ -343,7 +343,7 @@ fun VersusMatchmakingScreen(
                 CircularProgressIndicator(color = PrimaryNeonTeal)
             }
         } else if (activeLockoutSeconds > 0) {
-            // Neural lockout screen
+
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
@@ -435,7 +435,7 @@ fun VersusMatchmakingScreen(
                                     }
                                     "JOIN_ROOM" -> screenState = "SELECT_MODE"
                                     "LOBBY_ROOM" -> {
-                                        // Clear room & go back
+
                                         currentMatchId = null
                                         screenState = "SELECT_MODE"
                                     }
@@ -473,7 +473,7 @@ fun VersusMatchmakingScreen(
                                     modifier = Modifier.padding(bottom = 24.dp)
                                 )
 
-                                // Option 1: VS Bot
+
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -505,7 +505,7 @@ fun VersusMatchmakingScreen(
 
                                 Spacer(modifier = Modifier.height(20.dp))
 
-                                // Option 2: Random Matchmaking
+
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -537,7 +537,7 @@ fun VersusMatchmakingScreen(
 
                                 Spacer(modifier = Modifier.height(20.dp))
 
-                                // Option 3: Private lobby cards (Create / Join)
+
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -788,7 +788,7 @@ fun VersusMatchmakingScreen(
                                     .padding(24.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                // Room code presentation
+
                                 Box(
                                     modifier = Modifier
                                         .glassCard(shape = RoundedCornerShape(16.dp), backgroundColor = SurfaceCardContainer.copy(alpha = 0.5f))
@@ -817,12 +817,12 @@ fun VersusMatchmakingScreen(
 
                                 Spacer(modifier = Modifier.height(32.dp))
 
-                                // Players cards
+
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                                 ) {
-                                    // Host Card
+
                                     Box(
                                         modifier = Modifier
                                             .weight(1f)
@@ -843,7 +843,7 @@ fun VersusMatchmakingScreen(
                                         }
                                     }
 
-                                    // Guest Card
+
                                     val cardBorder = if (oppActive) SecondaryTangerine.copy(alpha = 0.3f) else Color.White.copy(alpha = 0.05f)
                                     val iconTint = if (oppActive) SecondaryTangerine else Color.White.copy(alpha = 0.3f)
 
@@ -870,7 +870,7 @@ fun VersusMatchmakingScreen(
 
                                 Spacer(modifier = Modifier.height(32.dp))
 
-                                // Host controls (select PDF) / Guest (Wait message)
+
                                 if (isHost) {
                                     Text(
                                         "SELECT DOCUMENT & LAUNCH",
@@ -882,7 +882,7 @@ fun VersusMatchmakingScreen(
                                     )
 
                                     if (documents.isEmpty()) {
-                                        // fetch if not loaded
+
                                         LaunchedEffect(Unit) {
                                             runCatching {
                                                 documents = RetrofitClient.instance.getDocuments()
@@ -929,7 +929,7 @@ fun VersusMatchmakingScreen(
                                         }
                                     }
                                 } else {
-                                    // Guest wait screen
+
                                     Box(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -951,7 +951,7 @@ fun VersusMatchmakingScreen(
                         }
 
                         "RADAR_SEARCH" -> {
-                            // Radar Matchmaker layout
+
                             Column(
                                 modifier = Modifier
                                     .fillMaxSize()

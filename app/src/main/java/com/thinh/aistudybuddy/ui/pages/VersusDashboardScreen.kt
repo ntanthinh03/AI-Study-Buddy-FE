@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -64,8 +65,9 @@ fun VersusDashboardScreen(
     var stats by remember { mutableStateOf<GamificationStats?>(null) }
     var historyList by remember { mutableStateOf<List<VersusHistoryEntry>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
+    var lockoutStatus by remember { mutableStateOf<com.thinh.aistudybuddy.data.models.VersusLockoutStatusResponse?>(null) }
 
-    // Dialog states
+
     var showEditDialog by remember { mutableStateOf(false) }
     var nicknameInput by remember { mutableStateOf("") }
     var isSavingProfile by remember { mutableStateOf(false) }
@@ -83,6 +85,10 @@ fun VersusDashboardScreen(
                 if (histResp.isSuccessful) {
                     historyList = histResp.body() ?: emptyList()
                 }
+                val lockoutResp = RetrofitClient.instance.getVersusLockoutStatus()
+                if (lockoutResp.isSuccessful) {
+                    lockoutStatus = lockoutResp.body()
+                }
             }.onFailure {
                 Toast.makeText(context, "Error loading neural dashboard data", Toast.LENGTH_SHORT).show()
             }
@@ -97,7 +103,7 @@ fun VersusDashboardScreen(
     val currentElo = stats?.elo ?: 1200
     val winStreak = stats?.versusWinStreak ?: 0
 
-    // Determine ELO Rank
+
     val (rankName, rankColor, rankBadgeLabel) = when {
         currentElo < 1200 -> Triple("Bronze Novice", Color(0xFFCD7F32), "BRONZE")
         currentElo in 1200..1399 -> Triple("Silver Synapse", Color(0xFFC0C0C0), "SILVER")
@@ -107,7 +113,7 @@ fun VersusDashboardScreen(
         else -> Triple("Master Mind", Color(0xFFFF4500), "MASTER")
     }
 
-    // Decode Base64 avatar image helper
+
     val decodedAvatarBitmap = remember(stats?.user?.avatar) {
         val base64Str = stats?.user?.avatar
         if (base64Str != null && base64Str.startsWith("data:image")) {
@@ -124,7 +130,7 @@ fun VersusDashboardScreen(
         }
     }
 
-    // Android Image Picker Launcher
+
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -135,7 +141,7 @@ fun VersusDashboardScreen(
                     val bytes = inputStream?.readBytes()
                     inputStream?.close()
                     if (bytes != null) {
-                        // Encode to Base64
+
                         val base64Str = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
                         val dataUrl = "data:image/jpeg;base64,$base64Str"
                         
@@ -155,7 +161,7 @@ fun VersusDashboardScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize().background(DeepSpaceBackground)) {
-        // Space Ambient backdrops
+
         Canvas(modifier = Modifier.fillMaxSize()) {
             drawCircle(
                 brush = Brush.radialGradient(
@@ -200,7 +206,7 @@ fun VersusDashboardScreen(
                     verticalArrangement = Arrangement.spacedBy(20.dp),
                     contentPadding = PaddingValues(bottom = 24.dp)
                 ) {
-                    // Item 1: Personal ELO & Badge Card
+
                     item {
                         Box(
                             modifier = Modifier
@@ -231,14 +237,14 @@ fun VersusDashboardScreen(
                                     "ME"
                                 }
 
-                                // Glowing Avatar Circle with Rank Shield Badge
+
                                 Box(
                                     modifier = Modifier
                                         .size(108.dp)
                                         .clickable { showEditDialog = true },
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    // Main Avatar circle
+
                                     Box(
                                         modifier = Modifier
                                             .size(96.dp)
@@ -270,7 +276,7 @@ fun VersusDashboardScreen(
                                         }
                                     }
 
-                                    // Floating mini Shield Badge at bottom-right
+
                                     Box(
                                         modifier = Modifier
                                             .size(32.dp)
@@ -290,7 +296,7 @@ fun VersusDashboardScreen(
 
                                 Spacer(modifier = Modifier.height(16.dp))
 
-                                // Tap to Edit profile action indicator
+
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier
@@ -339,9 +345,43 @@ fun VersusDashboardScreen(
                                     )
                                 }
 
+
+                                val warnings = lockoutStatus?.warningsCount ?: 0
+                                if (warnings > 0) {
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Row(
+                                        modifier = Modifier
+                                            .background(RoseWarning.copy(alpha = 0.15f), RoundedCornerShape(10.dp))
+                                            .border(1.dp, RoseWarning.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
+                                            .padding(horizontal = 14.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Warning,
+                                            contentDescription = null,
+                                            tint = RoseWarning,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        val warningText = if (lockoutStatus?.locked == true) {
+                                            "PENALIZED: LOCKOUT ACTIVE"
+                                        } else {
+                                            "PENALTY WARNING: $warnings/3"
+                                        }
+                                        Text(
+                                            text = warningText,
+                                            color = RoseWarning,
+                                            fontWeight = FontWeight.Black,
+                                            fontSize = 11.sp,
+                                            letterSpacing = 0.5.sp
+                                        )
+                                    }
+                                }
+
                                 Spacer(modifier = Modifier.height(16.dp))
 
-                                // Divider
+
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth(0.6f)
@@ -351,7 +391,7 @@ fun VersusDashboardScreen(
 
                                 Spacer(modifier = Modifier.height(16.dp))
 
-                                // Streak count
+
                                 Row(
                                     modifier = Modifier
                                         .background(
@@ -384,7 +424,7 @@ fun VersusDashboardScreen(
                         }
                     }
 
-                    // Item 2: Play Button Panel
+
                     item {
                         Button(
                             onClick = onStartBattle,
@@ -413,7 +453,7 @@ fun VersusDashboardScreen(
                         }
                     }
 
-                    // Item 3: Match History Header
+
                     item {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -431,7 +471,7 @@ fun VersusDashboardScreen(
                         }
                     }
 
-                    // Item 4: History list
+
                     if (historyList.isEmpty()) {
                         item {
                             Box(
@@ -534,7 +574,7 @@ fun VersusDashboardScreen(
 
                                     Spacer(modifier = Modifier.height(12.dp))
 
-                                    // Mode details & Review button
+
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -576,7 +616,7 @@ fun VersusDashboardScreen(
             }
         }
 
-        // Custom Profile Customization Portal Dialog
+
         if (showEditDialog) {
             AlertDialog(
                 onDismissRequest = { if (!isSavingProfile) showEditDialog = false },
@@ -597,7 +637,7 @@ fun VersusDashboardScreen(
                             fontSize = 12.sp
                         )
 
-                        // Nickname edit field
+
                         OutlinedTextField(
                             value = nicknameInput,
                             onValueChange = { nicknameInput = it },
@@ -630,7 +670,7 @@ fun VersusDashboardScreen(
                             )
                         }
 
-                        // Avatar photo uploader button
+
                         Button(
                             onClick = { imagePickerLauncher.launch("image/*") },
                             enabled = !isSavingProfile,

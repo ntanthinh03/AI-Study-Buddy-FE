@@ -58,7 +58,7 @@ fun FlashcardScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize().background(DeepSpaceBackground)) {
-        // Space Ambient glows
+
         val infiniteTransition = rememberInfiniteTransition(label = "flashcard_ambient")
         val pulseScale by infiniteTransition.animateFloat(
             initialValue = 0.9f,
@@ -171,7 +171,7 @@ fun FlashcardScreen(
                     }
                 }
 
-                // Always render the hub immediately; load happens in background.
+
                 FlashcardManagerContent(
                     flashcards = viewModel.flashcards,
                     reviewCount = viewModel.flashcardsToReview.size,

@@ -58,7 +58,7 @@ fun AnalyticsScreen(
                 viewModel.loadDashboard()
             }
     ) {
-        // Space Ambient glows
+
         val infiniteTransition = rememberInfiniteTransition(label = "analytics_ambient")
         val pulseScale by infiniteTransition.animateFloat(
             initialValue = 0.9f,

@@ -133,7 +133,7 @@ fun ConversationHistoryScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize().background(DeepSpaceBackground)) {
-        // Ambient floating canvas glows
+
         val infiniteTransition = rememberInfiniteTransition(label = "history_ambient")
         val pulseScale by infiniteTransition.animateFloat(
             initialValue = 0.9f,

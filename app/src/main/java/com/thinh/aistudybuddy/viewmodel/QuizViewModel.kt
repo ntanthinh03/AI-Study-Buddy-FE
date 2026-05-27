@@ -480,6 +480,88 @@ class QuizViewModel : ViewModel() {
         }
     }
 
+    fun calculateFinalScore() {
+        var finalScore = 0
+        _questions.forEachIndexed { index, question ->
+            val userAnswer = userAnswers.getOrNull(index) ?: -1
+            if (userAnswer != -1 && userAnswer == question.correctAnswerIndex) {
+                finalScore += 10
+            }
+            if (index < submittedQuestions.size) {
+                submittedQuestions[index] = true
+            }
+        }
+        score = finalScore
+        persistQuizState()
+    }
+
+    private fun preGenerateAllChunksInBackground(quizId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+
+                while (_questions.size < 20 && hasMoreQuestionsToGenerate) {
+                    if (isLoadingMoreQuestions) {
+                        kotlinx.coroutines.delay(1000)
+                        continue
+                    }
+                    
+                    isLoadingMoreQuestions = true
+                    Log.d(TAG, "Background pre-generating next chunk for quizId=$quizId, current size: ${_questions.size}")
+                    
+                    val response = RetrofitClient.instance.generateMoreQuestions(quizId)
+                    val newBackendQuestions = response.questions
+
+                    val newUiQuestions = newBackendQuestions.mapIndexed { idx, item ->
+                        val ordered = listOf("A", "B", "C", "D")
+                            .mapNotNull { key -> item.options[key] }
+                            .ifEmpty { item.options.values.toList() }
+                            .take(4)
+                        val safeOptions = if (ordered.size == 4) ordered else listOf("Option A", "Option B", "Option C", "Option D")
+                        val answerIndex = orderedAnswerIndexForGeneration(item.correctAnswer, safeOptions)
+                        
+                        QuizQuestion(
+                            id = "api-prog-${idx + 1}",
+                            question = item.question,
+                            options = safeOptions,
+                            correctAnswerIndex = answerIndex,
+                            hint = "Choose the best answer.",
+                            explanation = item.explanation
+                        )
+                    }
+
+                    withContext(Dispatchers.Main) {
+                        isLoadingMoreQuestions = false
+                        
+                        if (newUiQuestions.size > _questions.size) {
+                            val addedQuestions = newUiQuestions.drop(_questions.size)
+                            _questions.addAll(addedQuestions)
+
+                            repeat(addedQuestions.size) {
+                                userAnswers.add(-1)
+                                submittedQuestions.add(false)
+                            }
+
+                            persistQuizState()
+                            Log.d(TAG, "Background appended ${addedQuestions.size} questions. Total: ${_questions.size}")
+                        }
+
+                        if (response.completed || _questions.size >= 20 || newUiQuestions.size == _questions.size) {
+                            hasMoreQuestionsToGenerate = false
+                            Log.d(TAG, "Background progressive generation finished.")
+                        }
+                    }
+                    
+                    kotlinx.coroutines.delay(2000)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Background progressive generation failed", e)
+                withContext(Dispatchers.Main) {
+                    isLoadingMoreQuestions = false
+                }
+            }
+        }
+    }
+
     fun generateQuizForDocument(documentId: String) {
         isGeneratingQuiz = true
         quizGenerationError = null
@@ -497,6 +579,7 @@ class QuizViewModel : ViewModel() {
                         title = "Quiz: Document",
                         quizId = response.quizId
                     )
+                    preGenerateAllChunksInBackground(response.quizId)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to generate quiz", e)

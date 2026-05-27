@@ -47,7 +47,7 @@ fun ForgotPasswordResetScreen(
     var newPasswordError by remember { mutableStateOf<String?>(null) }
     var confirmPasswordError by remember { mutableStateOf<String?>(null) }
 
-    // Floating cyber orbs animation
+
     val infiniteTransition = rememberInfiniteTransition(label = "reset_ambient")
     val pulseScale by infiniteTransition.animateFloat(
         initialValue = 0.9f,
@@ -91,7 +91,7 @@ fun ForgotPasswordResetScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Neon glowing ambient background
+
             Canvas(modifier = Modifier.fillMaxSize()) {
                 drawCircle(
                     brush = Brush.radialGradient(
@@ -139,7 +139,7 @@ fun ForgotPasswordResetScreen(
                     modifier = Modifier.padding(bottom = 24.dp)
                 )
 
-                // Premium Glass Card container
+
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -205,7 +205,7 @@ fun ForgotPasswordResetScreen(
 
                     Spacer(modifier = Modifier.height(24.dp))
 
-                    // Neo-gradient interactive submit button
+
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()

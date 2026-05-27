@@ -38,7 +38,7 @@ fun StudyPlanScreen(
     studyViewModel: StudyPlanViewModel
 ) {
     Box(modifier = Modifier.fillMaxSize().background(DeepSpaceBackground)) {
-        // Pulsing space background glows
+
         val infiniteTransition = rememberInfiniteTransition(label = "roadmap_ambient")
         val pulseScale by infiniteTransition.animateFloat(
             initialValue = 0.9f,

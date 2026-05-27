@@ -34,6 +34,21 @@ interface ApiService {
     @POST("auth/change-password")
     suspend fun changePassword(@Body request: ChangePasswordRequest): MessageResponse
 
+    @GET("auth/profile")
+    suspend fun getProfile(): User
+
+    @POST("auth/profile/update-major")
+    suspend fun updateMajor(@Body request: UpdateMajorRequest): User
+
+    @POST("auth/profile/update-avatar")
+    suspend fun updateAvatar(@Body request: UpdateAvatarRequest): User
+
+    @POST("auth/profile/send-otp")
+    suspend fun sendProfileOtp(@Body request: SendOtpRequest): MessageResponse
+
+    @POST("auth/profile/verify-otp")
+    suspend fun verifyProfileOtp(@Body request: VerifyOtpRequest): User
+
     @GET("documents")
     suspend fun getDocuments(): List<Document>
 
@@ -190,6 +205,11 @@ interface ApiService {
     @POST("flashcards/generate/{documentId}")
     suspend fun generateFlashcards(
         @Path("documentId") documentId: String
+    ): List<Flashcard>
+
+    @POST("flashcards/generate-by-topic")
+    suspend fun generateFlashcardsByTopic(
+        @Body request: FlashcardTopicRequest
     ): List<Flashcard>
 
     @GET("flashcards")

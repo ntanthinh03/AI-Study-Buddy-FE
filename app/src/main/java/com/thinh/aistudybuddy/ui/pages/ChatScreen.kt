@@ -281,7 +281,7 @@ fun ChatScreen(
         }
     ) {
         Box(modifier = Modifier.fillMaxSize().background(DeepSpaceBackground)) {
-            // Ambient floating canvas glows
+
             val infiniteTransition = rememberInfiniteTransition(label = "chat_ambient")
             val pulseScale by infiniteTransition.animateFloat(
                 initialValue = 0.9f,

@@ -1030,19 +1030,6 @@ class ChatViewModel : ViewModel() {
             updateConversationKind(resolvedConversationId, ConversationKind.QUIZ)
             val index = _conversations.indexOfFirst { it.id == resolvedConversationId }
             if (index != -1) {
-                val updatedConv = _conversations[index]
-                updatedConv.chatMessages.add(
-                    ChatMessage(
-                        id = UUID.randomUUID().toString(),
-                        text = "Quiz is ready: $quizTitle",
-                        isUser = false,
-                        showQuizButton = true,
-                        specificTitle = quizTitle,
-                        documentId = updatedConv.documentId
-                    )
-                )
-                _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages.toMutableList())
-                persistChatState()
                 maybeAutoRenameConversation(resolvedConversationId, userMessage, "Quiz is ready: $quizTitle")
             }
         } catch (e: HttpException) {
@@ -1836,10 +1823,10 @@ class ChatViewModel : ViewModel() {
         val convIdToUse = targetConversationId ?: activeConversationId
         val docIdToUse = _conversations.find { it.id == convIdToUse }?.documentId
 
-        // Deduplicate ARTIFACT messages: keep only the LAST artifact of each artifactType.
-        // The backend creates multiple ARTIFACT rows for the same quiz/plan (e.g. from
-        // generateQuiz, saveFeQuiz, generateMoreQuestions, saveDocumentArtifact, inline chat).
-        // Without dedup all of them show as separate chat bubbles after reload.
+
+
+
+
         val lastArtifactIdByType = mutableMapOf<String, String>()
         for (item in this) {
             val mt = item.messageType.orEmpty().trim().uppercase()
@@ -1862,7 +1849,7 @@ class ChatViewModel : ViewModel() {
             val artifactType = item.artifactType.orEmpty().trim().uppercase()
 
             if (messageType == "ARTIFACT" && suppressedArtifactIds.contains(item.id)) {
-                return@forEach // skip duplicate artifact
+                return@forEach
             }
 
             if (messageType == "ARTIFACT") {
@@ -1877,22 +1864,6 @@ class ChatViewModel : ViewModel() {
                 }.getOrNull()
 
                 when (artifactType) {
-                    "QUIZ" -> messages.add(
-                        ChatMessage(
-                            id = "hist-artifact-quiz-${item.id}",
-                            text = label ?: "Quiz is ready. Tap Start Quiz to begin.",
-                            isUser = false,
-                            showQuizButton = true,
-                            messageLabel = label,
-                            specificTitle = specificTitle,
-                            messageType = messageType,
-                            artifactType = artifactType,
-                            artifactJson = item.artifactJson,
-                            planJson = item.artifactJson?.toString(),
-                            documentId = docIdToUse,
-                            createdAt = item.createdAt
-                        )
-                    )
                     "STUDY_PLAN" -> messages.add(
                         ChatMessage(
                             id = "hist-artifact-plan-${item.id}",
@@ -1946,29 +1917,16 @@ class ChatViewModel : ViewModel() {
                 
                 val hasAlreadyAddedQuiz = messages.any { it.showQuizButton && it.id.contains(item.id) }
                 
-                if (looksLikeGeneratedQuizAnswer(answerText) && !hasAlreadyAddedQuiz) {
-                    messages.add(
-                        ChatMessage(
-                            id = "hist-ai-quiz-ready-${item.id}",
-                            text = "Quiz is ready. Tap Start Quiz to begin.",
-                            isUser = false,
-                            showQuizButton = true,
-                            documentId = docIdToUse,
-                            createdAt = item.createdAt
-                        )
+                messages.add(
+                    ChatMessage(
+                        id = "hist-ai-${item.id}",
+                        text = answerText,
+                        isUser = false,
+                        showFlashcardButton = docIdToUse != null,
+                        documentId = docIdToUse,
+                        createdAt = item.createdAt
                     )
-                } else if (!looksLikeGeneratedQuizAnswer(answerText)) {
-                    messages.add(
-                        ChatMessage(
-                            id = "hist-ai-${item.id}",
-                            text = answerText,
-                            isUser = false,
-                            showFlashcardButton = docIdToUse != null,
-                            documentId = docIdToUse,
-                            createdAt = item.createdAt
-                        )
-                    )
-                }
+                )
             }
         }
         return messages

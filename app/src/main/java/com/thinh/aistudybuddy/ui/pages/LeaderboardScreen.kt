@@ -41,7 +41,7 @@ fun LeaderboardScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize().background(DeepSpaceBackground)) {
-        // Space Ambient glows
+
         val infiniteTransition = rememberInfiniteTransition(label = "leaderboard_ambient")
         val pulseScale by infiniteTransition.animateFloat(
             initialValue = 0.9f,

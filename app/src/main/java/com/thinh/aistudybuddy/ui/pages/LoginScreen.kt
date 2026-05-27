@@ -45,7 +45,7 @@ fun LoginScreen(
     val loginViewModel: LoginViewModel = viewModel()
     var rememberLogin by remember { mutableStateOf(false) }
 
-    // Floating cyber orbs animation
+
     val infiniteTransition = rememberInfiniteTransition(label = "login_ambient")
     val pulseScale by infiniteTransition.animateFloat(
         initialValue = 0.9f,
@@ -74,7 +74,7 @@ fun LoginScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Neon glowing ambient background
+
             Canvas(modifier = Modifier.fillMaxSize()) {
                 drawCircle(
                     brush = Brush.radialGradient(
@@ -122,7 +122,7 @@ fun LoginScreen(
                     modifier = Modifier.padding(bottom = 24.dp)
                 )
 
-                // Premium Glass Card container
+
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -183,7 +183,7 @@ fun LoginScreen(
 
                     Spacer(modifier = Modifier.height(20.dp))
 
-                    // Neo-gradient interactive login button
+
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -264,4 +264,4 @@ fun LoginScreen(
             }
         }
     }
-}
+}

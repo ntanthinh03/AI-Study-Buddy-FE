@@ -1,318 +1,98 @@
-# Buddy App - Frontend (Android)
+# Buddy App: Mobile Client Application
 
-**AI-powered study companion built with Kotlin and Jetpack Compose**
+This repository contains the mobile frontend of the AI Study Buddy platform, an Android client developed in Kotlin utilizing declarative Jetpack Compose UI architectures. The client coordinates with the `server-study-buddy` backend server to provide offline-first data synchronization, real-time cooperative study spaces, and local AI-driven content generation workflows.
 
-## Overview
+---
 
-Buddy is a mobile study application that helps users learn effectively through spaced repetition, AI-driven content generation, and gamification. The frontend is built with modern Android best practices using Kotlin and Jetpack Compose.
+## Architecture and Core Functionality
 
-## Features
+The mobile client leverages reactive programming paradigms and modern Android architecture guidelines to deliver a highly interactive interface.
 
-### Core Learning Features
-- **Daily Study Sessions** — Quiz questions and flashcards tailored to your learning level
-- **Spaced Repetition (Leitner Box)** — Intelligent flashcard scheduling based on learning progress
-- **Document Upload & RAG** — Upload PDFs/images and learn from your own materials
-- **AI Chat** — Multi-turn conversations with document context support
-- **Quiz Generation** — Auto-generate quizzes from documents via AI
-- **Study Plans** — AI-created study roadmaps tailored to your goals
+### Primary Capabilities
+- **Interactive Daily Quizzes**: Step-by-step quiz interfaces utilizing immediate color-coded responses (RoseWarning and EmeraldSuccess) accompanied by active theory explanations and final full-session summary reviews.
+- **Milestone Streak Celebrations**: High-fidelity animated streak summaries displaying cumulative streak milestones (Bronze, Silver, Gold, Platinum, Diamond) based on verified study schedules.
+- **Interactive Scholar Profile**: Access to registration inputs (Full Name, University Email, Phone Number, Major Selection) alongside base64 gallery image picker integrations for instant profile picture updates.
+- **Transactional Verification Panels**: Custom dialog layers designed to verify profile alterations (Email and Phone changes) utilizing short-lived 6-digit OTP tokens delivered securely to current active emails via Brevo.
+- **RAG & Leitner Spaced Repetition**: Deep integration with vector processing backends and local Leitner deck memory box systems to support personalized study intervals.
+- **Robust List Optimizations**: Performance-tuned LazyColumn lists with optimized key constraints, fully resolving duplicate identification errors and preventing UI freeze anomalies.
 
-### Gamification
-- **XP & Leveling System** — Earn XP for completed sessions, correct answers, and focus time
-- **Streaks** — Track daily study streaks and personal records
-- **Leaderboard** — Compete with other learners on global rankings
-- **Focus Timer** — 25-minute Pomodoro sessions with XP rewards
+---
 
-### Social Features
-- **Co-study Rooms** — Study synchronously with friends in real-time
-- **Live Quiz Challenges** — Compete in multiplayer quizzes with instant scoring
-- **Study Groups** — Join or create study communities
+## Technical Stack
 
-### Account Management
-- **JWT Authentication** — Secure login and registration
-- **Password Recovery** — Email-based OTP verification
-- **Profile Management** — Customize learning preferences
-- **Progress Tracking** — View detailed learning analytics and history
+- **Development Language**: Kotlin
+- **User Interface Framework**: Jetpack Compose (Declarative UI)
+- **HTTP Communications**: Retrofit 2 and custom OkHttp interceptors
+- **Real-Time Communication**: Socket.IO client library
+- **Persistence Layer**: Jetpack DataStore (encrypted configuration) and Room SQLite Database
+- **Image Pipeline**: Coil (cached remote asset rendering)
+- **Design Pattern**: Model-View-ViewModel (MVVM) coupled with the Repository pattern
 
-## Tech Stack
+---
 
-- **Language:** Kotlin
-- **UI Framework:** Jetpack Compose
-- **HTTP Client:** Retrofit 2 with OkHttp interceptors
-- **Real-time:** Socket.IO for multiplayer features
-- **Local Storage:** DataStore, Room, SharedPreferences
-- **Image Loading:** Coil with caching
-- **Serialization:** Gson
-- **Architecture:** MVVM + Repository pattern
-
-## Project Structure
+## Directory Hierarchy
 
 ```
 app/src/main/
 ├── java/com/thinh/aistudybuddy/
 │   ├── data/
-│   │   ├── models/          # Data classes (StudySession, Flashcard, etc.)
-│   │   ├── network/         # Retrofit API interfaces and RetrofitClient
-│   │   └── local/           # DataStore, SessionStore, TokenDataStore
+│   │   ├── models/          # Data schemas (StudySession, Flashcard, User)
+│   │   ├── network/         # Retrofit API interface blueprints and HttpClient
+│   │   └── local/           # Room Database, SharedPreferences, and DataStore
 │   ├── ui/
-│   │   ├── theme/
-│   │   │   ├── screens/     # Main UI screens (Chat, DailySession, Quiz, etc.)
-│   │   │   ├── components/  # Reusable Compose components
-│   │   │   └── Color.kt     # Theme colors
-│   │   └── AppNavigation.kt # Navigation setup
-│   ├── viewmodel/           # State management (ChatViewModel, etc.)
-│   └── MainActivity.kt
+│   │   ├── theme/           # Palette design tokens and structural styles
+│   │   ├── screens/         # Compose layouts (ChatScreen, FlashcardScreen, etc.)
+│   │   ├── components/      # Reusable Compose atomic nodes
+│   │   └── AppNavigation.kt # Navigation graph definitions
+│   ├── viewmodel/           # UI State holders (ChatViewModel, AuthViewModel)
+│   └── MainActivity.kt      # Application bootstrap entry point
 └── res/
-    ├── values/strings.xml   # String resources
-    └── drawable/            # Assets and icons
+    ├── values/strings.xml   # Localization resources
+    └── drawable/            # Vector and raster assets
 ```
 
-## Prerequisites
+---
 
-- Android SDK 24+ (Android 7.0+)
-- Gradle 7+
-- Kotlin 1.9+
-- Backend server running on accessible network
+## Technical Deployment and Connection Guide
 
-## Installation & Setup
+Follow these configuration steps to bind this client to the backend application server:
 
-### 1. Clone and Prepare
+### Step 1: Confirm API Server Status
+Prior to client execution, verify the `server-study-buddy` server is active. The backend must be configured to accept connections on port `3001` (or your chosen environment variable).
+
+### Step 2: Establish Network Connections
+1. **Android Emulator Deployment**:
+   - The networking system defaults to loopback route `http://10.0.2.2:3001` to interface with the development host machine.
+2. **Physical Hardware Deployment**:
+   - The development computer and Android device must reside on the same Wi-Fi subnet.
+   - Navigate to the **Settings Screen** in the app, input the host IP address (e.g., `http://192.168.1.15:3001`), and save.
+
+### Step 3: Compile and Install
 ```bash
-cd FEBuddy
+# Clean local cache structures
 ./gradlew clean
-```
 
-### 2. Configure Backend URL
-
-Edit `app/src/main/java/com/thinh/aistudybuddy/data/local/NetworkConfigStore.kt` or use Settings screen:
-
-**For Local Development:**
-- Emulator: `http://10.0.2.2:3002` (auto-detected)
-- Physical Device: `http://<PC-IP>:3002` (set in Settings)
-
-**For Production:**
-- Backend URL environment
-
-### 3. Build
-
-```bash
-# Build debug APK
-./gradlew assembleDebug
-
-# Build and install on emulator/device
-./gradlew installDebug
-
-# Or run directly from Android Studio
-# Shift + F10 (Windows) or Cmd + R (Mac)
-```
-
-### 4. Run on Emulator
-
-```bash
-# Start emulator first (from Android Studio or)
-emulator -avd <emulator_name>
-
-# Then run
+# Install directly to active emulator or tethered device
 ./gradlew installDebug
 ```
 
-## Key Screens
+---
 
-| Screen | Purpose |
-|--------|---------|
-| **LoginScreen** | User authentication |
-| **ChatScreen** | Main chat interface with document upload |
-| **DailySessionScreen** | Quiz + flashcard learning session |
-| **FlashcardScreen** | Flashcard library and review mode |
-| **AnalyticsScreen** | Learning dashboard with stats |
-| **QuizScreen** | Take quizzes on demand |
-| **MockExamScreen** | Full-length timed exams |
-| **LeaderboardScreen** | View global rankings |
-| **FocusScreen** | Pomodoro timer for focused study |
-| **StudyRoomScreen** | Join multiplayer study sessions |
-| **SettingsScreen** | Configure backend URL and preferences |
+## State and Data Persistence Architecture
 
-## State Management
-
-State is managed using **ViewModel + StateFlow** pattern:
-
+### Reactive State Pattern
+The application UI observes state changes via Kotlin `StateFlow` structures exposed by corresponding ViewModels, ensuring data consistency across screen rotations and configuration changes:
 ```kotlin
 class ChatViewModel : ViewModel() {
-    private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
-    val messages: StateFlow<List<ChatMessage>> = _messages.asStateFlow()
+    private val _uiState = MutableStateFlow<ChatUiState>(ChatUiState.Loading)
+    val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
     
-    fun sendMessage(text: String) {
-        // Message sending logic
+    fun postMessage(content: String) {
+        // API transmission and view state mutation logic
     }
 }
 ```
 
-Each screen has a corresponding ViewModel that:
-- Manages UI state
-- Makes API calls via RetrofitClient
-- Handles local storage (DataStore, Room)
-- Notifies UI of state changes
-
-## API Integration
-
-### RetrofitClient
-Central API client configuration:
-
-```kotlin
-RetrofitClient.getInstance(context).create(ApiService::class.java)
-```
-
-Features:
-- Auto-detects backend URL from active port
-- Adds JWT token to all requests
-- Handles token refresh on 401
-- Timeout configuration for file uploads
-
-### Key Endpoints
-
-**Authentication:**
-- `POST /auth/login` — User login
-- `POST /auth/register` — Create account
-- `POST /auth/change-password` — Update password
-- `POST /auth/forgot-password` — Initiate password recovery
-
-**Study Sessions:**
-- `GET /study-sessions/daily` — Get/create daily session
-- `POST /study-sessions/:id/submit` — Submit session results
-- `GET /study-sessions/leaderboard` — Get top users
-
-**Flashcards:**
-- `POST /flashcards/generate` — Generate from document
-- `GET /flashcards/to-review` — Get due cards
-- `POST /flashcards/:id/review` — Record review
-
-**Documents:**
-- `POST /documents/upload` — Upload PDF/image
-- `GET /documents` — List documents
-- `DELETE /documents/:id` — Delete document
-
-**Chat:**
-- `POST /chat` — Send message with context
-- `GET /conversations` — List conversations
-- `GET /conversations/:id/messages` — Get history
-
-**WebSocket (Study Rooms):**
-- Connect: `ws://backend:3002/study-rooms`
-- Events: `joinRoom`, `answerSubmit`, `leaderboardUpdate`
-
-## Authentication Flow
-
-1. **Login:** Send email + password → receive JWT token
-2. **Store:** Save token to TokenDataStore (encrypted DataStore)
-3. **Requests:** Retrofit automatically adds `Authorization: Bearer <token>` header
-4. **Refresh:** On 401 response, request new token automatically
-5. **Logout:** Clear token from storage
-
-## Local Storage
-
-### DataStore (Recommended)
-```kotlin
-// Secure token storage
-val tokenStore = TokenDataStore(context)
-tokenStore.getToken() // Read
-tokenStore.saveToken(token) // Write
-```
-
-### Room Database
-- **LocalHistoryStore:** Offline conversation history
-- Pre-populated with sample data for development
-
-### SharedPreferences (Legacy)
-- Session data before DataStore migration
-- Gradually replaced by DataStore
-
-## Building for Release
-
-```bash
-# Create release keystore (first time)
-keytool -genkey -v -keystore release.keystore -keyalg RSA -keysize 2048 -validity 10000 -alias buddy-key
-
-# Build signed APK
-./gradlew bundleRelease
-```
-
-## Testing
-
-### Unit Tests
-```bash
-./gradlew test
-```
-
-### Instrumented Tests (on device/emulator)
-```bash
-./gradlew connectedAndroidTest
-```
-
-### Manual Testing
-1. Start backend: `npm run start:dev`
-2. Start emulator
-3. Run app: `./gradlew installDebug`
-4. Navigate through screens
-5. Check logs: `adb logcat | grep "StudyBuddy"`
-
-## Troubleshooting
-
-### Build Issues
-
-**Error: Cannot find Gradle dependency**
-- Solution: `./gradlew clean && ./gradlew build --refresh-dependencies`
-
-**Error: Build locked by another Gradle instance**
-- Solution: `./gradlew --stop && ./gradlew clean assembleDebug`
-
-### Runtime Issues
-
-**Backend URL not connecting**
-- Check: Settings screen → Backend Connection
-- Verify backend is running: `curl http://<backend-ip>:3002/health`
-- For emulator: Use `http://10.0.2.2:3002` instead of `localhost`
-
-**Images not loading**
-- Check: `adb logcat | grep Coil`
-- Ensure document IDs are correct
-- Verify backend serves images correctly
-
-**Token expired/401 errors**
-- App auto-refreshes token (check TokenDataStore)
-- If persisting: Clear app data → Re-login
-- `adb shell pm clear com.thinh.aistudybuddy`
-
-## Performance Optimization
-
-- **Lazy Loading:** Compose screens load only visible content
-- **Image Caching:** Coil caches images locally
-- **State Preservation:** ViewModel survives configuration changes
-- **Network Caching:** Retrofit + OkHttp configured for smart caching
-
-## Security
-
-- **Token Storage:** Encrypted DataStore (not SharedPreferences)
-- **HTTPS Ready:** Retrofit configured for SSL pinning (optional)
-- **Input Validation:** All user inputs sanitized before API calls
-- **Permissions:** Only requests necessary Android permissions
-
-## Contributing
-
-1. Create feature branch: `git checkout -b feature/your-feature`
-2. Follow Kotlin style guide (4-space indentation)
-3. Test on both emulator and physical device
-4. Commit: `git commit -m "feat: description"`
-5. Push and create PR
-
-## Resources
-
-- [Kotlin Documentation](https://kotlinlang.org/docs/)
-- [Jetpack Compose](https://developer.android.com/jetpack/compose)
-- [Android Architecture Components](https://developer.android.com/topic/architecture)
-- [Backend API Documentation](../server-study-buddy/README.md)
-
----
-
-**Version:** 1.0  
-**Last Updated:** May 8, 2026  
-**Maintained by:** Study Buddy Team
-
+### Storage Paradigms
+- **Credential Storage**: Access tokens are preserved securely in an encrypted `TokenDataStore` utilizing the Jetpack DataStore engine.
+- **Relational Cache**: Conversational streams and offline activity cards are stored in local Room SQL tables, optimizing data access in limited network environments.

@@ -164,6 +164,41 @@ class FlashcardViewModel : ViewModel() {
         }
     }
 
+    fun generateFlashcardsByTopic(documentId: String, topic: String, onComplete: ((List<Flashcard>?) -> Unit)? = null) {
+        viewModelScope.launch(Dispatchers.IO) {
+            if (documentId.isBlank() || topic.isBlank()) {
+                withContext(Dispatchers.Main) {
+                    error = "Missing documentId or topic name."
+                    onComplete?.invoke(null)
+                }
+                return@launch
+            }
+
+            withContext(Dispatchers.Main) {
+                isGenerating = true
+                error = null
+            }
+            try {
+                val result = RetrofitClient.instance.generateFlashcardsByTopic(
+                    com.thinh.aistudybuddy.data.models.FlashcardTopicRequest(documentId, topic)
+                )
+                withContext(Dispatchers.Main) {
+                    _flashcards.addAll(0, result)
+                    onComplete?.invoke(result)
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    error = "Failed to generate flashcards by topic: ${e.message}"
+                    onComplete?.invoke(null)
+                }
+            } finally {
+                withContext(Dispatchers.Main) {
+                    isGenerating = false
+                }
+            }
+        }
+    }
+
     fun submitReview(flashcardId: String, isCorrect: Boolean) {
         viewModelScope.launch(Dispatchers.IO) {
             try {

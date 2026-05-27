@@ -32,21 +32,21 @@ private val CyberDarkColorScheme = darkColorScheme(
     onSurface = Color.White,
     surfaceVariant = SurfaceContainerHigh,
     onSurfaceVariant = Color.White,
-    outline = Color(0x26FFFFFF), // Translucent borders
+    outline = Color(0x26FFFFFF),
     error = RoseWarning,
     onError = Color.White
 )
 
 @Composable
 fun FEBuddyTheme(
-    darkTheme: Boolean = true, // Force dark theme by default for immersive cyberpunk feel
-    dynamicColor: Boolean = false, // Disable dynamic colors to preserve high-fidelity Stitch AI color system
+    darkTheme: Boolean = true,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colorScheme = if (darkTheme) {
         CyberDarkColorScheme
     } else {
-        // Fallback/Legacy light mode maps back to dark space background for cyberpunk continuity
+
         CyberDarkColorScheme
     }
 
@@ -57,18 +57,18 @@ fun FEBuddyTheme(
     )
 }
 
-// Global Cyberpunk Glass Card Modifier Extension
+
 fun Modifier.glassCard(
     shape: Shape = RoundedCornerShape(16.dp),
-    backgroundColor: Color = Color(0xB3102034), // Rich translucent space navy (70% opacity)
-    borderColor: Color = Color(0x1Fffffff), // Soft translucent white border (12% opacity)
+    backgroundColor: Color = Color(0xB3102034),
+    borderColor: Color = Color(0x1Fffffff),
     borderWidth: Dp = 1.dp
 ): Modifier = this
     .clip(shape)
     .background(backgroundColor)
     .border(width = borderWidth, color = borderColor, shape = shape)
 
-// Helper: Cyber Gradient Border
+
 fun Modifier.cyberBorder(
     shape: Shape = RoundedCornerShape(16.dp),
     borderWidth: Dp = 1.5.dp,
@@ -79,4 +79,4 @@ fun Modifier.cyberBorder(
         width = borderWidth,
         brush = Brush.linearGradient(colors = listOf(startColor, endColor)),
         shape = shape
-    )
+    )

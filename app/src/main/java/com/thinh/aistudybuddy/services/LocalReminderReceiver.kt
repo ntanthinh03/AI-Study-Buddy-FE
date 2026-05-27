@@ -29,7 +29,7 @@ class LocalReminderReceiver : BroadcastReceiver() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
 
-            val triggerTime = System.currentTimeMillis() + 15 * 60 * 1000 // 15 mins
+            val triggerTime = System.currentTimeMillis() + 15 * 60 * 1000
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
             } else {

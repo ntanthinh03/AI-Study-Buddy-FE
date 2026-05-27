@@ -17,6 +17,13 @@ class DailySessionViewModel : ViewModel() {
     var currentStep by mutableIntStateOf(0)
     var correctCount by mutableIntStateOf(0)
     var isFinished by mutableStateOf(false)
+    var wasAlreadyCompleted by mutableStateOf(false)
+
+    // Interactive quiz states
+    var selectedOption by mutableStateOf<String?>(null)
+    var showFeedback by mutableStateOf(false)
+    val userAnswers = mutableStateMapOf<Int, String>()
+    var reviewModeActive by mutableStateOf(false)
 
     fun loadDailySession() {
         viewModelScope.launch {
@@ -25,7 +32,11 @@ class DailySessionViewModel : ViewModel() {
             try {
                 val response = RetrofitClient.instance.getDailySession()
                 if (response.isSuccessful) {
-                    session = response.body()
+                    val s = response.body()
+                    session = s
+                    if (s?.status == "COMPLETED") {
+                        wasAlreadyCompleted = true
+                    }
                 } else {
                     errorMessage = "Failed to load session: ${response.code()}"
                 }
@@ -42,12 +53,37 @@ class DailySessionViewModel : ViewModel() {
         }
     }
 
-    fun submitAnswer(isCorrect: Boolean) {
-        if (isCorrect) correctCount++
-        
-        val totalSteps = (session?.content?.quizQuestions?.size ?: 0) + (session?.content?.flashcards?.size ?: 0)
+    fun selectOption(option: String) {
+        if (!showFeedback) {
+            selectedOption = option
+        }
+    }
+
+    fun confirmAnswer(correctAnswer: String) {
+        if (selectedOption != null && !showFeedback) {
+            showFeedback = true
+            userAnswers[currentStep] = selectedOption!!
+            if (selectedOption == correctAnswer) {
+                correctCount++
+            }
+        }
+    }
+
+    fun nextStep() {
+        val totalSteps = session?.content?.quizQuestions?.size ?: 0
         if (currentStep < totalSteps - 1) {
             currentStep++
+            selectedOption = null
+            showFeedback = false
+        } else {
+            // Trigger review screen first as requested
+            reviewModeActive = true
+        }
+    }
+
+    fun completeSessionAfterReview() {
+        if (wasAlreadyCompleted) {
+            isFinished = true
         } else {
             finishSession()
         }
@@ -58,7 +94,7 @@ class DailySessionViewModel : ViewModel() {
         viewModelScope.launch {
             loading = true
             try {
-                val totalQuestions = (session?.content?.quizQuestions?.size ?: 0)
+                val totalQuestions = session?.content?.quizQuestions?.size ?: 0
                 val response = RetrofitClient.instance.submitSessionResult(
                     currentSession.id,
                     SessionSubmitResult(correctCount, totalQuestions)

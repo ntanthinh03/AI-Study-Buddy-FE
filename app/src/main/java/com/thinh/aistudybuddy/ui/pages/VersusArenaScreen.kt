@@ -54,19 +54,19 @@ fun VersusArenaScreen(
     var isSubmitting by remember { mutableStateOf(false) }
     var isLoadingNextChunk by remember { mutableStateOf(false) }
 
-    // Question Timer (30s)
+
     var timeLeft by remember { mutableStateOf(30) }
     var timerActive by remember { mutableStateOf(false) }
 
-    // HUD Dynamic Status values
+
     var opponentProgressText by remember { mutableStateOf("Opponent analyzing...") }
     var opponentAnsweredThisQuestion by remember { mutableStateOf(false) }
 
-    // Quit Forfeit States
+
     var showQuitDialog by remember { mutableStateOf(false) }
     var activeWarnings by remember { mutableStateOf(0) }
 
-    // Fetch active warnings
+
     LaunchedEffect(showQuitDialog) {
         if (showQuitDialog) {
             runCatching {
@@ -78,7 +78,7 @@ fun VersusArenaScreen(
         }
     }
 
-    // Function to poll lobby for completion (used when player finishes all questions first)
+
     suspend fun pollForNextQuestions() {
         isLoadingNextChunk = true
         var retries = 0
@@ -110,7 +110,7 @@ fun VersusArenaScreen(
         onGameFinished(matchId)
     }
 
-    // Submit Answer logic
+
     fun submitAnswer(optionKey: String) {
         if (isSubmitting || match == null) return
         isSubmitting = true
@@ -161,7 +161,7 @@ fun VersusArenaScreen(
         }
     }
 
-    // Fetch initial match info
+
     LaunchedEffect(matchId) {
         runCatching {
             val resp = RetrofitClient.instance.getVersusLobbyStatus(matchId)
@@ -174,7 +174,7 @@ fun VersusArenaScreen(
         }
     }
 
-    // 30s Countdown timer effect
+
     LaunchedEffect(currentQuestionIndex, timerActive) {
         if (!timerActive) return@LaunchedEffect
         timeLeft = 30
@@ -187,13 +187,13 @@ fun VersusArenaScreen(
         }
     }
 
-    // Real-time opponent status polling or simulation
+
     LaunchedEffect(currentQuestionIndex, match?.mode) {
         if (match == null) return@LaunchedEffect
         opponentAnsweredThisQuestion = false
 
         if (match?.mode == "PVP_LOBBY") {
-            // Live PvP lobby: poll lobby status every 3 seconds to see if opponent answered
+
             opponentProgressText = "Opponent is reading..."
             while (!opponentAnsweredThisQuestion) {
                 delay(3000)
@@ -211,7 +211,7 @@ fun VersusArenaScreen(
                 }
             }
         } else {
-            // Offline/Bot modes: simulate reading delay
+
             opponentProgressText = "Opponent is reading..."
             val botDelay = 3000L + (0..6000).random().toLong()
             delay(botDelay)
@@ -229,7 +229,7 @@ fun VersusArenaScreen(
 
     val currentQuestion = match?.questions?.getOrNull(currentQuestionIndex)
 
-    // Roles and scoring setup
+
     val myName = if (isGuest) (match?.opponentName ?: "You") else (match?.hostName ?: "You")
     val myScore = if (isGuest) (match?.botScore ?: 0) else (match?.playerScore ?: 0)
     val myCorrectCount = if (isGuest) (match?.botCorrectCount ?: 0) else (match?.playerCorrectCount ?: 0)
@@ -241,7 +241,7 @@ fun VersusArenaScreen(
 
 
     Box(modifier = Modifier.fillMaxSize().background(DeepSpaceBackground)) {
-        // Starfield Canvas
+
         Canvas(modifier = Modifier.fillMaxSize()) {
             drawCircle(
                 brush = Brush.radialGradient(
@@ -279,7 +279,7 @@ fun VersusArenaScreen(
             containerColor = Color.Transparent
         ) { padding ->
             if (isLoadingNextChunk) {
-                // Background quiz expansion buffer
+
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -313,7 +313,7 @@ fun VersusArenaScreen(
                         .padding(padding)
                         .padding(horizontal = 24.dp)
                 ) {
-                    // Esports dynamic scoreboard
+
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -321,7 +321,7 @@ fun VersusArenaScreen(
                             .cyberBorder(shape = RoundedCornerShape(16.dp), borderWidth = 1.dp, startColor = PrimaryNeonTeal.copy(alpha = 0.15f), endColor = TertiaryCosmicIndigo.copy(alpha = 0.15f))
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            // Me Score
+
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -345,7 +345,7 @@ fun VersusArenaScreen(
 
                             Spacer(modifier = Modifier.height(14.dp))
 
-                            // Opponent Score
+
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -384,7 +384,7 @@ fun VersusArenaScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Timer & Bonus indicator
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -419,7 +419,7 @@ fun VersusArenaScreen(
 
                     Spacer(modifier = Modifier.height(24.dp))
 
-                    // Question Card
+
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -438,7 +438,7 @@ fun VersusArenaScreen(
 
                     Spacer(modifier = Modifier.height(24.dp))
 
-                    // Options layout
+
                     val options = listOf("A", "B", "C", "D")
                     Column(
                         verticalArrangement = Arrangement.spacedBy(12.dp),

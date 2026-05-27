@@ -17,6 +17,7 @@ class RegisterViewModel : ViewModel() {
     var email by mutableStateOf("")
     var password by mutableStateOf("")
     var phoneNumber by mutableStateOf("")
+    var major by mutableStateOf("Computer Science")
 
     var isLoading by mutableStateOf(false)
     var errorMessage by mutableStateOf<String?>(null)
@@ -44,7 +45,8 @@ class RegisterViewModel : ViewModel() {
                     email = email,
                     password = password,
                     fullName = fullName,
-                    phoneNumber = normalizedPhone
+                    phoneNumber = normalizedPhone,
+                    major = major
                 )
                 RetrofitClient.instance.register(request)
                 onSuccess()

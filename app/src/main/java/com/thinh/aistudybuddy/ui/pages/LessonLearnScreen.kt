@@ -40,7 +40,7 @@ fun LessonLearnScreen(
     val isLocked = lesson.status == ModuleStatus.LOCKED
 
     Box(modifier = Modifier.fillMaxSize().background(DeepSpaceBackground)) {
-        // Pulsing space background glows
+
         val infiniteTransition = rememberInfiniteTransition(label = "lesson_ambient")
         val pulseScale by infiniteTransition.animateFloat(
             initialValue = 0.9f,
@@ -106,7 +106,7 @@ fun LessonLearnScreen(
             ) {
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Lesson Header Card (Glassmorphic)
+
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -142,7 +142,7 @@ fun LessonLearnScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            // Difficulty Badge
+
                             Box(
                                 modifier = Modifier
                                     .glassCard(
@@ -160,7 +160,7 @@ fun LessonLearnScreen(
                                 )
                             }
 
-                            // Time Badge
+
                             Box(
                                 modifier = Modifier
                                     .glassCard(
@@ -178,7 +178,7 @@ fun LessonLearnScreen(
                                 )
                             }
 
-                            // Status Badge
+
                             Box(
                                 modifier = Modifier
                                     .glassCard(
@@ -213,7 +213,7 @@ fun LessonLearnScreen(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Content Panel (Glassmorphic)
+
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()

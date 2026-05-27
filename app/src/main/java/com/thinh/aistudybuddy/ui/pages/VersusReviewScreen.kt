@@ -72,7 +72,7 @@ fun VersusReviewScreen(
     val isDraw = (match?.playerScore ?: 0) == (match?.botScore ?: 0)
 
     Box(modifier = Modifier.fillMaxSize().background(DeepSpaceBackground)) {
-        // Space Glow Backdrops
+
         Canvas(modifier = Modifier.fillMaxSize()) {
             drawCircle(
                 brush = Brush.radialGradient(
@@ -119,7 +119,7 @@ fun VersusReviewScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 contentPadding = PaddingValues(bottom = 32.dp)
             ) {
-                // 1. Victory/Defeat Banner
+
                 item {
                     Box(
                         modifier = Modifier
@@ -169,7 +169,7 @@ fun VersusReviewScreen(
 
                             Spacer(modifier = Modifier.height(8.dp))
 
-                            // Score display
+
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.Center
@@ -216,7 +216,7 @@ fun VersusReviewScreen(
                     )
                 }
 
-                // 2. Questions list review items
+
                 val questions = match?.questions ?: emptyList()
                 itemsIndexed(questions) { index, question ->
                     val playerAns = match?.playerAnswers?.get(index.toString())
@@ -278,7 +278,7 @@ fun VersusReviewScreen(
 
                             Spacer(modifier = Modifier.height(12.dp))
 
-                            // Answers indicators
+
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -343,7 +343,7 @@ fun VersusReviewScreen(
                     }
                 }
 
-                // 3. Return Home Button
+
                 item {
                     Spacer(modifier = Modifier.height(12.dp))
                     Button(

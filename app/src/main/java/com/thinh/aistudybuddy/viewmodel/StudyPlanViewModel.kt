@@ -24,6 +24,7 @@ import java.io.IOException
 class StudyPlanViewModel : ViewModel() {
     companion object {
         private const val TAG = "StudyPlanViewModel"
+        private const val PASSING_SCORE_THRESHOLD = 30 // 3 correct answers × 10 pts each
         private val UUID_REGEX = Regex(
             "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
         )
@@ -44,6 +45,8 @@ class StudyPlanViewModel : ViewModel() {
     private var pendingEnrichmentSyncModuleIds by mutableStateOf<Set<String>>(emptySet())
     private var initializedDocuments by mutableStateOf<Set<String>>(emptySet())
     private var lessonConversationId by mutableStateOf<String?>(null)
+    private var lessonStatuses by mutableStateOf<Map<String, ModuleStatus>>(emptyMap())
+    private var lessonScores by mutableStateOf<Map<String, Int>>(emptyMap())
     var timeline by mutableStateOf<List<StudyProgressItem>>(emptyList())
         private set
     var loading by mutableStateOf(false)
@@ -58,17 +61,40 @@ class StudyPlanViewModel : ViewModel() {
             val base = (studyPlanResponse ?: fallbackPlanResponse).toLegacyPlan(timeline)
             val enrichedLessons = base.lessons.map { lesson ->
                 val enriched = lessonEnrichment[lesson.id]
+                val status = lessonStatuses[lesson.id] ?: lesson.status
+                val score = lessonScores[lesson.id]
+
                 if (enriched == null) {
-                    lesson
+                    lesson.copy(status = status, userScore = score)
                 } else {
                     lesson.copy(
                         content = enriched.theory,
-                        quizQuestions = enriched.quizQuestions
+                        quizQuestions = enriched.quizQuestions,
+                        status = status,
+                        userScore = score
                     )
                 }
             }
+
+            // Enforce sequential roadmap progression
+            var lastWasCompleted = true
+            val sequentialLessons = enrichedLessons.mapIndexed { index, lesson ->
+                val calculatedStatus = when {
+                    lesson.status == ModuleStatus.COMPLETED -> ModuleStatus.COMPLETED
+                    lastWasCompleted -> {
+                        lastWasCompleted = false
+                        ModuleStatus.IN_PROGRESS
+                    }
+                    else -> ModuleStatus.LOCKED
+                }
+                if (lesson.status == ModuleStatus.COMPLETED) {
+                    lastWasCompleted = true
+                }
+                lesson.copy(status = calculatedStatus)
+            }
+
             return base.copy(
-                lessons = enrichedLessons,
+                lessons = sequentialLessons,
                 intensity = selectedIntensity
             )
         }
@@ -94,6 +120,10 @@ class StudyPlanViewModel : ViewModel() {
                 }
                 backendLessonIdByModuleId = cached.backendLessonIdByModuleId.orEmpty()
                 pendingEnrichmentSyncModuleIds = cached.pendingEnrichmentModuleIds.orEmpty().toSet()
+                lessonStatuses = cached.lessonStatuses.orEmpty().mapValues { (_, value) ->
+                    runCatching { ModuleStatus.valueOf(value) }.getOrDefault(ModuleStatus.LOCKED)
+                }
+                lessonScores = cached.lessonScores.orEmpty()
             }
         }
 
@@ -168,13 +198,23 @@ class StudyPlanViewModel : ViewModel() {
         val normalizedScore = (rawScore.coerceAtLeast(0) * 100 / maxScore).coerceIn(0, 100)
         val backendLessonId = backendLessonIdByModuleId[lessonId]
 
-        timeline = upsertTimeline(module.documentId, module.title, normalizedScore)
+        val passed = rawScore >= PASSING_SCORE_THRESHOLD
+        val newStatus = if (passed) ModuleStatus.COMPLETED else ModuleStatus.IN_PROGRESS
+
+        lessonStatuses = lessonStatuses + (lessonId to newStatus)
+        lessonScores = lessonScores + (lessonId to (normalizedScore / 10))
+
+        if (passed) {
+            timeline = upsertTimeline(module.documentId, module.title, normalizedScore)
+        }
         persistStudyPlanState()
 
         if (RetrofitClient.authToken.isNullOrBlank()) {
-            errorMessage = "Missing token. Please log in again."
+            if (passed) errorMessage = "Missing token. Please log in again."
             return
         }
+
+        if (!passed) return
 
         viewModelScope.launch {
             loading = true
@@ -252,6 +292,32 @@ class StudyPlanViewModel : ViewModel() {
         }
     }
 
+    val isAllLessonsReady: Boolean
+        get() {
+            val lessons = activePlan.lessons
+            if (lessons.isEmpty()) return false
+            return lessons.all { lessonEnrichment.containsKey(it.id) }
+        }
+
+    val readyLessonsCount: Int
+        get() = activePlan.lessons.count { lessonEnrichment.containsKey(it.id) }
+
+    val totalLessonsCount: Int
+        get() = activePlan.lessons.size
+
+    fun isLessonReady(lessonId: String): Boolean {
+        return lessonEnrichment.containsKey(lessonId)
+    }
+
+    fun ensureAllLessonsEnriched() {
+        val modules = currentModules
+        modules.forEach { module ->
+            if (!lessonEnrichment.containsKey(module.moduleId)) {
+                ensureLessonEnriched(module.moduleId)
+            }
+        }
+    }
+
     fun resolveBackendLessonId(moduleId: String): String? {
         if (moduleId.isBlank()) return null
         return backendLessonIdByModuleId[moduleId]
@@ -284,6 +350,9 @@ class StudyPlanViewModel : ViewModel() {
                 timeline = RetrofitClient.instance.getProgressTimeline()
                 loadStoredLessonEnrichmentFromBackend()
                 persistStudyPlanState()
+                
+                // Automatically pre-enrich all modules in background once remote progress is ready
+                ensureAllLessonsEnriched()
             } catch (e: HttpException) {
                 handleHttpError(e)
             } catch (_: IOException) {
@@ -303,6 +372,8 @@ class StudyPlanViewModel : ViewModel() {
         val modules = currentModules
         val loadedEnrichment = mutableMapOf<String, LessonEnrichment>()
         val loadedIds = mutableMapOf<String, String>()
+        val loadedStatuses = mutableMapOf<String, ModuleStatus>()
+        val loadedScores = mutableMapOf<String, Int>()
 
         lessons
             .sortedByDescending { it.updatedAt ?: it.createdAt ?: "" }
@@ -311,6 +382,24 @@ class StudyPlanViewModel : ViewModel() {
                 if (!loadedIds.containsKey(module.moduleId)) {
                     loadedIds[module.moduleId] = backendLesson.id
                 }
+                
+                if (!loadedStatuses.containsKey(module.moduleId)) {
+                    val status = when (backendLesson.status?.uppercase()) {
+                        "COMPLETED" -> ModuleStatus.COMPLETED
+                        "IN_PROGRESS" -> ModuleStatus.IN_PROGRESS
+                        else -> ModuleStatus.LOCKED
+                    }
+                    loadedStatuses[module.moduleId] = status
+                }
+
+                if (!loadedScores.containsKey(module.moduleId)) {
+                    val quizObj = backendLesson.quizJson?.asJsonObjectOrNull()
+                    val score = quizObj?.get("score")?.asIntOrNull()
+                    if (score != null) {
+                        loadedScores[module.moduleId] = score / 10
+                    }
+                }
+
                 if (!loadedEnrichment.containsKey(module.moduleId)) {
                     val enrichment = progressLessonToEnrichment(backendLesson, module)
                     if (enrichment != null) {
@@ -321,6 +410,12 @@ class StudyPlanViewModel : ViewModel() {
 
         if (loadedIds.isNotEmpty()) {
             backendLessonIdByModuleId = backendLessonIdByModuleId + loadedIds
+        }
+        if (loadedStatuses.isNotEmpty()) {
+            lessonStatuses = lessonStatuses + loadedStatuses
+        }
+        if (loadedScores.isNotEmpty()) {
+            lessonScores = lessonScores + loadedScores
         }
         if (loadedEnrichment.isNotEmpty()) {
             lessonEnrichment = lessonEnrichment + loadedEnrichment
@@ -417,7 +512,7 @@ class StudyPlanViewModel : ViewModel() {
         val theory = progressLesson.contentText.trim().takeIf { it.isNotBlank() } ?: return null
         val parsedQuiz = parseProgressLessonQuiz(progressLesson.quizJson, module)
         if (parsedQuiz.size < 5) return null
-        return LessonEnrichment(theory = theory, quizQuestions = parsedQuiz.take(5))
+        return LessonEnrichment(theory = theory, quizQuestions = parsedQuiz.take(10))
     }
 
     private fun parseProgressLessonQuiz(quizJson: JsonElement?, module: StudyModule): List<QuizQuestion> {
@@ -495,8 +590,8 @@ class StudyPlanViewModel : ViewModel() {
             append("\"id\":\"...\",\"text\":\"...\",\"options\":[\"...\",\"...\",\"...\",\"...\"],\"answer\":\"A\",\"explanation\":\"...\"}")
             append("]}")
             append(". Requirements: theory 180-260 words in English, practical and aligned to the objective. ")
-            append("Create exactly 5 quiz questions. All 5 must be different in intent and wording. ")
-            append("Question types: concept check, misconception check, scenario application, comparison, and best-practice choice. ")
+            append("Create between 7 and 10 quiz questions. All questions must be different in intent and wording. ")
+            append("Question types: concept check, misconception check, scenario application, comparison, best-practice choice, definition recall, cause-and-effect, and true-false style. ")
             append("Each question has exactly 4 options. answer must be A/B/C/D and must match one option. ")
             append("Lesson title: ${module.title}. ")
             append("Objective: ${module.objective}. ")
@@ -543,7 +638,7 @@ class StudyPlanViewModel : ViewModel() {
 
         return LessonEnrichment(
             theory = theory,
-            quizQuestions = distinctQuestions.take(5)
+            quizQuestions = distinctQuestions.take(10)
         )
     }
 
@@ -626,6 +721,32 @@ class StudyPlanViewModel : ViewModel() {
                 correctAnswerIndex = 2,
                 hint = "Use active practice with reasoning.",
                 explanation = "Reasoning through options improves application skill and quiz performance."
+            ),
+            QuizQuestion(
+                id = "${module.moduleId}-fallback-6",
+                question = "$title: What is the best way to check whether you truly understand $objective?",
+                options = listOf(
+                    "Recite the topic once and stop",
+                    "Explain it from memory without notes",
+                    "Ignore mistakes and move on",
+                    "Only read the lesson title again"
+                ),
+                correctAnswerIndex = 1,
+                hint = "Use retrieval.",
+                explanation = "Explaining from memory is a stronger check of understanding than passive review."
+            ),
+            QuizQuestion(
+                id = "${module.moduleId}-fallback-7",
+                question = "$title: Which action best supports long-term retention after the lesson?",
+                options = listOf(
+                    "Stop reviewing immediately after finishing",
+                    "Create a short summary and revisit it later",
+                    "Memorize only the first sentence",
+                    "Skip all follow-up practice"
+                ),
+                correctAnswerIndex = 1,
+                hint = "Think spaced review.",
+                explanation = "A short summary plus later review supports memory consolidation."
             )
         )
 
@@ -724,7 +845,9 @@ class StudyPlanViewModel : ViewModel() {
                 )
             },
             backendLessonIdByModuleId = backendLessonIdByModuleId,
-            pendingEnrichmentModuleIds = pendingEnrichmentSyncModuleIds.toList()
+            pendingEnrichmentModuleIds = pendingEnrichmentSyncModuleIds.toList(),
+            lessonStatuses = lessonStatuses.mapValues { it.value.name },
+            lessonScores = lessonScores
         )
     }
 }

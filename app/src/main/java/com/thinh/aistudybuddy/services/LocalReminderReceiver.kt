@@ -10,6 +10,8 @@ import android.content.Intent
 import android.os.Build
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
+import android.Manifest
 import com.thinh.aistudybuddy.MainActivity
 
 class LocalReminderReceiver : BroadcastReceiver() {
@@ -30,10 +32,20 @@ class LocalReminderReceiver : BroadcastReceiver() {
             )
 
             val triggerTime = System.currentTimeMillis() + 15 * 60 * 1000
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
-            } else {
-                alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    if (alarmManager.canScheduleExactAlarms()) {
+                        alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
+                    } else {
+                        alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
+                    }
+                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
+                } else {
+                    alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
+                }
+            } catch (e: SecurityException) {
+                alarmManager.set(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
             }
             
             Toast.makeText(context, "Reminder snoozed for 15 minutes", Toast.LENGTH_SHORT).show()
@@ -92,6 +104,16 @@ class LocalReminderReceiver : BroadcastReceiver() {
             .addAction(android.R.drawable.ic_media_play, "Start Quiz Now", openAppPendingIntent)
             .addAction(android.R.drawable.ic_menu_recent_history, "Snooze (15m)", snoozePendingIntent)
 
-        notificationManager.notify(1002, builder.build())
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) {
+                notificationManager.notify(1002, builder.build())
+            }
+        } else {
+            notificationManager.notify(1002, builder.build())
+        }
     }
 }

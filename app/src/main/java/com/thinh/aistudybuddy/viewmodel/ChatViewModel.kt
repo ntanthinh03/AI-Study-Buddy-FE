@@ -80,7 +80,7 @@ class ChatViewModel : ViewModel() {
     private var _currentChatType = mutableStateOf(ChatScreenType.NEW_CHAT)
     val currentChatType: ChatScreenType get() = _currentChatType.value
     private val quizKeywords = listOf("quiz", "multiple choice", "mcq", "test me", "practice", "practice questions")
-    private val planKeywords = listOf("study plan", "plan", "roadmap", "learning path", "course plan", "learning plan")
+    private val planKeywords = listOf("study plan", "plan", "roadmap", "learning path", "course plan", "learning plan", "progress")
 
     private val _suggestions = mutableStateListOf<Suggestion>()
     val suggestions: List<Suggestion> get() = _suggestions
@@ -1068,7 +1068,7 @@ class ChatViewModel : ViewModel() {
                 updatedConv.chatMessages.add(
                     ChatMessage(
                         id = UUID.randomUUID().toString(),
-                        text = "Plan is ready: $planTitle",
+                        text = "Study plan is ready.",
                         isUser = false,
                         showStudyPlanButton = true,
                         planJson = planJson,
@@ -1079,7 +1079,7 @@ class ChatViewModel : ViewModel() {
                 )
                 _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages.toMutableList())
                 persistChatState()
-                maybeAutoRenameConversation(convId, userMessage, "Plan is ready: $planTitle")
+                maybeAutoRenameConversation(convId, userMessage, "Study plan is ready.")
             }
         } catch (e: HttpException) {
             handleHttpError(e, forceLogoutOn401 = false)
@@ -1139,7 +1139,7 @@ class ChatViewModel : ViewModel() {
 
         val hiddenPrompt = buildString {
             append("Create a study plan in valid JSON only. ")
-            append("Schema: {\"planId\":\"...\",\"title\":\"...\",\"overview\":\"...\",\"estimatedTotalMinutes\":120,\"modules\":[{\"moduleId\":\"m1\",\"order\":1,\"documentId\":\"8f7f4d7a-9f9e-4c97-b1e2-c6f9f5e5b0e1\",\"title\":\"...\",\"objective\":\"...\",\"estimatedMinutes\":30,\"difficulty\":\"BEGINNER\",\"status\":\"IN_PROGRESS\",\"quiz\":{\"recommendedQuestionCount\":5,\"passScore\":70}}]}. ")
+            append("Schema: {\"planId\":\"...\",\"title\":\"...\",\"overview\":\"...\",\"estimatedTotalMinutes\":120,\"modules\":[{\"moduleId\":\"m1\",\"order\":1,\"documentId\":\"8f7f4d7a-9f9e-4c97-b1e2-c6f9f5e5b0e1\",\"title\":\"...\",\"objective\":\"...\",\"estimatedMinutes\":30,\"difficulty\":\"BEGINNER\",\"status\":\"IN_PROGRESS\",\"quiz\":{\"recommendedQuestionCount\":7,\"passScore\":30}}]}. ")
             append("If a real backend document id is unknown, set documentId to an empty string. ")
             append("Rules: Output English only, no markdown, no code fences, status must be LOCKED|IN_PROGRESS|COMPLETED. ")
             append("User request: ")

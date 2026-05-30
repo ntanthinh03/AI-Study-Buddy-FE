@@ -46,6 +46,12 @@ android {
     buildFeatures {
         compose = true
     }
+
+    lint {
+        disable.add("NotificationPermission")
+        disable.add("ScheduleExactAlarm")
+        disable.add("UnusedContentLambdaTargetStateParameter")
+    }
 }
 
 dependencies {

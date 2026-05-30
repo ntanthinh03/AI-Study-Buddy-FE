@@ -79,7 +79,9 @@ data class CachedStudyPlanState(
     val timeline: List<StudyProgressItem> = emptyList(),
     val lessonEnrichment: Map<String, CachedLessonEnrichment>? = null,
     val backendLessonIdByModuleId: Map<String, String>? = null,
-    val pendingEnrichmentModuleIds: List<String>? = null
+    val pendingEnrichmentModuleIds: List<String>? = null,
+    val lessonStatuses: Map<String, String>? = null,
+    val lessonScores: Map<String, Int>? = null
 )
 
 object LocalHistoryStore {
@@ -118,7 +120,9 @@ object LocalHistoryStore {
         timeline: List<StudyProgressItem>,
         lessonEnrichment: Map<String, CachedLessonEnrichment> = emptyMap(),
         backendLessonIdByModuleId: Map<String, String> = emptyMap(),
-        pendingEnrichmentModuleIds: List<String> = emptyList()
+        pendingEnrichmentModuleIds: List<String> = emptyList(),
+        lessonStatuses: Map<String, String> = emptyMap(),
+        lessonScores: Map<String, Int> = emptyMap()
     ) {
         writeHistory {
             copy(
@@ -127,7 +131,9 @@ object LocalHistoryStore {
                     timeline = timeline,
                     lessonEnrichment = lessonEnrichment,
                     backendLessonIdByModuleId = backendLessonIdByModuleId,
-                    pendingEnrichmentModuleIds = pendingEnrichmentModuleIds
+                    pendingEnrichmentModuleIds = pendingEnrichmentModuleIds,
+                    lessonStatuses = lessonStatuses,
+                    lessonScores = lessonScores
                 )
             )
         }

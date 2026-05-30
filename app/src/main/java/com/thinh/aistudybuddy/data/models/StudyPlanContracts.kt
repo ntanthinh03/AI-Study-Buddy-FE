@@ -21,10 +21,10 @@ val DEFAULT_STUDY_PLAN_JSON = """
       "estimatedMinutes": 45,
       "difficulty": "BEGINNER",
       "status": "IN_PROGRESS",
-      "quiz": {
-        "recommendedQuestionCount": 5,
-        "passScore": 70
-      }
+                "quiz": {
+                "recommendedQuestionCount": 7,
+                "passScore": 30
+            }
     },
     {
       "moduleId": "m2",
@@ -35,10 +35,10 @@ val DEFAULT_STUDY_PLAN_JSON = """
       "estimatedMinutes": 60,
       "difficulty": "INTERMEDIATE",
       "status": "LOCKED",
-      "quiz": {
-        "recommendedQuestionCount": 5,
-        "passScore": 70
-      }
+                "quiz": {
+                "recommendedQuestionCount": 7,
+                "passScore": 30
+            }
     },
     {
       "moduleId": "m3",
@@ -49,10 +49,10 @@ val DEFAULT_STUDY_PLAN_JSON = """
       "estimatedMinutes": 75,
       "difficulty": "INTERMEDIATE",
       "status": "LOCKED",
-      "quiz": {
-        "recommendedQuestionCount": 5,
-        "passScore": 75
-      }
+                "quiz": {
+                "recommendedQuestionCount": 7,
+                "passScore": 30
+            }
     }
   ]
 }
@@ -175,7 +175,7 @@ fun StudyModule.toLesson(progress: StudyProgressItem? = null): Lesson {
 }
 
 private fun generateModuleQuizQuestions(module: StudyModule): List<QuizQuestion> {
-    val questionCount = module.quiz?.recommendedQuestionCount?.coerceAtLeast(3) ?: 3
+    val questionCount = module.quiz?.recommendedQuestionCount?.coerceIn(7, 10) ?: 7
     return List(questionCount) { index ->
         QuizQuestion(
             id = "${module.moduleId}-q${index + 1}",

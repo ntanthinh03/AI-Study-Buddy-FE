@@ -243,7 +243,7 @@ fun FlashcardReviewScreen(
                     }
                 }
             } else {
-                val reviewFinished = visibleCards.isNotEmpty() && currentIndex >= visibleCards.size
+                val reviewFinished = visibleCards.isEmpty() || currentIndex >= visibleCards.size
 
                 if (reviewFinished) {
                     Box(

@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.sp
 import com.thinh.aistudybuddy.data.models.*
 import com.thinh.aistudybuddy.ui.theme.*
 import com.thinh.aistudybuddy.viewmodel.StudyPlanViewModel
+import com.thinh.aistudybuddy.ui.components.BuddyLogo
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -134,11 +135,8 @@ fun StudyPlanScreen(
                                 .clip(CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.AutoAwesome,
-                                contentDescription = null,
-                                tint = PrimaryNeonTeal,
-                                modifier = Modifier.size(36.dp)
+                            BuddyLogo(
+                                modifier = Modifier.size(44.dp)
                             )
                         }
                         
@@ -234,14 +232,6 @@ fun StudyPlanScreen(
                         navigationIcon = {
                             IconButton(onClick = onBack) {
                                 Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White)
-                            }
-                        },
-                        actions = {
-                            val firstDocId = studyViewModel.activePlan.lessons.firstOrNull { it.documentId.isNotBlank() }?.documentId
-                            if (firstDocId != null) {
-                                IconButton(onClick = { onMindMapClick(firstDocId, studyViewModel.activePlan.title) }) {
-                                    Icon(Icons.Default.AccountTree, "Mind Map", tint = PrimaryNeonTeal)
-                                }
                             }
                         },
                         colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)

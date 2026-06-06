@@ -81,14 +81,14 @@ fun MindMapScreen(
                 brush = Brush.radialGradient(
                     colors = listOf(PrimaryNeonTeal.copy(alpha = 0.08f * pulseScale), Color.Transparent),
                     center = Offset(size.width * 0.2f, size.height * 0.3f + floatOffset),
-                    radius = size.width * 0.6f
+                    radius = (size.width * 0.6f).coerceAtLeast(1f)
                 )
             )
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(TertiaryCosmicIndigo.copy(alpha = 0.08f * pulseScale), Color.Transparent),
                     center = Offset(size.width * 0.8f, size.height * 0.7f - floatOffset),
-                    radius = size.width * 0.6f
+                    radius = (size.width * 0.6f).coerceAtLeast(1f)
                 )
             )
         }
@@ -203,7 +203,7 @@ fun GeneratingMindMapAnimation(message: String) {
                     brush = Brush.sweepGradient(
                         colors = listOf(PrimaryNeonTeal, TertiaryCosmicIndigo, PrimaryNeonTeal)
                     ),
-                    radius = size.minDimension / 2 * scale,
+                    radius = (size.minDimension / 2 * scale).coerceAtLeast(1f),
                     alpha = 0.3f
                 )
             }
@@ -259,20 +259,21 @@ fun GeneratingMindMapAnimation(message: String) {
 
 @Composable
 fun MindMapContent(nodes: List<MindMapNode>, onNodeClick: (MindMapNode) -> Unit) {
-    val rootNodes = nodes.filter { it.parentId == null }
+    val rootNodes = nodes.filter { it.parentId == null || !nodes.any { n -> n.id == it.parentId } }
     
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(16.dp),
         contentPadding = PaddingValues(bottom = 48.dp)
     ) {
         items(rootNodes) { root ->
-            MindMapBranch(root, nodes, 0, onNodeClick)
+            MindMapBranch(root, nodes, 0, emptySet(), onNodeClick)
         }
     }
 }
 
 @Composable
-fun MindMapBranch(node: MindMapNode, allNodes: List<MindMapNode>, depth: Int, onNodeClick: (MindMapNode) -> Unit) {
+fun MindMapBranch(node: MindMapNode, allNodes: List<MindMapNode>, depth: Int, visited: Set<String>, onNodeClick: (MindMapNode) -> Unit) {
+    if (visited.contains(node.id) || depth > 15) return
     val children = allNodes.filter { it.parentId == node.id }
     
     Column(modifier = Modifier.padding(start = (depth * 20).dp)) {
@@ -315,8 +316,9 @@ fun MindMapBranch(node: MindMapNode, allNodes: List<MindMapNode>, depth: Int, on
             }
         }
         
+        val nextVisited = visited + node.id
         children.forEach { child ->
-            MindMapBranch(child, allNodes, depth + 1, onNodeClick)
+            MindMapBranch(child, allNodes, depth + 1, nextVisited, onNodeClick)
         }
     }
 }
@@ -334,6 +336,12 @@ fun InteractiveConceptStudyBoard(
     val isGenerating = flashcardViewModel.isGenerating
     var cardIndex by remember { mutableStateOf(0) }
     var isFlipped by remember { mutableStateOf(false) }
+
+    // reset index to 0 when concept node changes. avoid index out of bound crash if next concept has less cards
+    LaunchedEffect(node.id, conceptFlashcards) {
+        cardIndex = 0
+        isFlipped = false
+    }
 
     val rotation by animateFloatAsState(
         targetValue = if (isFlipped) 180f else 0f,

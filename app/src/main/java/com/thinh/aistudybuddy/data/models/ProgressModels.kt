@@ -77,7 +77,8 @@ data class SaveLessonQuizResponse(
 )
 
 data class ProgressLessonStatusRequest(
-    val status: String
+    val status: String,
+    val score: Int? = null
 )
 
 data class StudyPlanApiResponse(

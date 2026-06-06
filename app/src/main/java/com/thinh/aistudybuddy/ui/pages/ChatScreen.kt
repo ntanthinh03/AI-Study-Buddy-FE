@@ -447,9 +447,19 @@ fun ChatScreen(
                                 onCheckPlan = { planJson ->
                                     if (!planJson.isNullOrBlank()) {
                                         studyPlanViewModel.loadStudyPlanFromJson(planJson)
+                                        studyPlanViewModel.refreshProgressTimeline()
+                                        onStudyPlanClick()
+                                    } else {
+                                        val docId = message.documentId
+                                        if (!docId.isNullOrBlank()) {
+                                            studyPlanViewModel.fetchAndLoadStudyPlan(docId) {
+                                                onStudyPlanClick()
+                                            }
+                                        } else {
+                                            studyPlanViewModel.refreshProgressTimeline()
+                                            onStudyPlanClick()
+                                        }
                                     }
-                                    studyPlanViewModel.refreshProgressTimeline()
-                                    onStudyPlanClick()
                                 },
                                 onGenerateFlashcards = { docId ->
                                     flashcardViewModel.focusDocument(docId)
@@ -463,7 +473,10 @@ fun ChatScreen(
                                 onSpeakClick = { text ->
                                     tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, null)
                                 },
-                                showArtifactButtons = isFirstAiMessage
+                                showArtifactButtons = isFirstAiMessage,
+                                showQuizBtn = true,
+                                showFlashcardBtn = true,
+                                showMindMapBtn = true
                             )
                         }
                         if (viewModel.isTyping && !viewModel.isUploading) {

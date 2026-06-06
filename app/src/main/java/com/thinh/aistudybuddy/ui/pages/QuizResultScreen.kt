@@ -192,31 +192,33 @@ fun QuizResultScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            val correctAnswers = viewModel.score / 10
-            val passed = correctAnswers >= 3
-            Box(
-                modifier = Modifier
-                    .glassCard(
-                        shape = RoundedCornerShape(12.dp),
-                        backgroundColor = if (passed) EmeraldSuccess.copy(alpha = 0.15f)
-                        else RoseWarning.copy(alpha = 0.15f)
+            if (viewModel.isLessonBased) {
+                val correctAnswers = viewModel.score / 10
+                val passed = correctAnswers >= 3
+                Box(
+                    modifier = Modifier
+                        .glassCard(
+                            shape = RoundedCornerShape(12.dp),
+                            backgroundColor = if (passed) EmeraldSuccess.copy(alpha = 0.15f)
+                            else RoseWarning.copy(alpha = 0.15f)
+                        )
+                        .cyberBorder(
+                            shape = RoundedCornerShape(12.dp),
+                            borderWidth = 1.dp,
+                            startColor = if (passed) EmeraldSuccess else RoseWarning,
+                            endColor = if (passed) EmeraldSuccess.copy(alpha = 0.3f) else RoseWarning.copy(alpha = 0.3f)
+                        )
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                ) {
+                    Text(
+                        text = if (passed) "✅ LESSON PASSED! ($correctAnswers correct)"
+                        else "❌ Need at least 3 correct to pass ($correctAnswers/${totalQuestions})",
+                        color = if (passed) EmeraldSuccess else RoseWarning,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.5.sp
                     )
-                    .cyberBorder(
-                        shape = RoundedCornerShape(12.dp),
-                        borderWidth = 1.dp,
-                        startColor = if (passed) EmeraldSuccess else RoseWarning,
-                        endColor = if (passed) EmeraldSuccess.copy(alpha = 0.3f) else RoseWarning.copy(alpha = 0.3f)
-                    )
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-            ) {
-                Text(
-                    text = if (passed) "✅ LESSON PASSED! ($correctAnswers correct)"
-                    else "❌ Need at least 3 correct to pass ($correctAnswers/${totalQuestions})",
-                    color = if (passed) EmeraldSuccess else RoseWarning,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.5.sp
-                )
+                }
             }
 
             Spacer(modifier = Modifier.height(40.dp))

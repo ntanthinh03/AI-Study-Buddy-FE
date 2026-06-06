@@ -106,6 +106,9 @@ object StudyPlanJsonParser {
         val root = runCatching { JsonParser().parse(rawJson) }.getOrNull() as? JsonObject ?: return null
 
         val directPlan = when {
+            root.has("studyPlan") && root.get("studyPlan").isJsonObject -> {
+                gson.fromJson(root.get("studyPlan").asJsonObject, StudyPlanResponse::class.java)
+            }
             root.has("plan") && root.get("plan").isJsonObject -> {
                 gson.fromJson(root.get("plan").asJsonObject, StudyPlanResponse::class.java)
             }

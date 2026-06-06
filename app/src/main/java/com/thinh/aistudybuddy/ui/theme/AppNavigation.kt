@@ -174,7 +174,9 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
                 studyPlanViewModel = studyViewModel,
                 onProfileClick = { navController.navigate("account") },
                 onStartQuiz = { message: ChatMessage ->
-                    val quizJson = message.artifactJson?.toString() ?: message.planJson
+                    val isQuizArtifact = message.artifactType == "QUIZ"
+                    val quizJson = if (isQuizArtifact) (message.artifactJson?.toString() ?: message.planJson) else null
+                    var success = false
                     if (!quizJson.isNullOrBlank()) {
                         val questions = parseQuizFromJson(quizJson)
                         if (questions.isNotEmpty()) {
@@ -184,8 +186,10 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
                                 documentId = message.documentId
                             )
                             navController.navigate("quiz")
+                            success = true
                         }
-                    } else if (!message.documentId.isNullOrBlank()) {
+                    }
+                    if (!success && !message.documentId.isNullOrBlank()) {
                         quizViewModel.generateQuizForDocument(message.documentId)
                         navController.navigate("quiz")
                     }
@@ -219,7 +223,7 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
                     mindMapViewModel.generateMindMap(docId, summary) {
                         
                     }
-                    navController.navigate("mind_map/$docId/$docName")
+                    navController.navigate("mind_map/$docId")
                 },
                 onConversationHistoryClick = { conversationId: String -> navController.navigate("conversation_history/$conversationId") },
                 onSessionExpired = forceLogin,
@@ -247,7 +251,7 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
                 },
                 studyViewModel = studyViewModel,
                 onMindMapClick = { docId, docName ->
-                    navController.navigate("mind_map/$docId/$docName")
+                    navController.navigate("mind_map/$docId")
                 }
             )
         }
@@ -291,14 +295,13 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
             )
         }
         composable(
-            route = "mind_map/{documentId}/{documentName}",
+            route = "mind_map/{documentId}",
             arguments = listOf(
-                navArgument("documentId") { type = NavType.StringType },
-                navArgument("documentName") { type = NavType.StringType }
+                navArgument("documentId") { type = NavType.StringType }
             )
         ) { backStackEntry ->
             val documentId = backStackEntry.arguments?.getString("documentId") ?: ""
-            val documentName = backStackEntry.arguments?.getString("documentName") ?: ""
+            val documentName = mindMapViewModel.currentMindMap?.title ?: "Document"
             MindMapScreen(
                 documentId = documentId,
                 documentName = documentName,
@@ -332,8 +335,7 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
                     navController.navigate("lesson_learn")
                 },
                 onOpenMindMap = { docId ->
-                    val docName = chatViewModel.conversations.find { it.documentId == docId }?.title ?: "Document"
-                    navController.navigate("mind_map/$docId/$docName")
+                    navController.navigate("mind_map/$docId")
                 },
                 timelineStatusByDocumentId = studyViewModel.timeline.associate { it.documentId to it.status },
                 onRefresh = { conversationId: String ->
@@ -341,7 +343,9 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
                     studyViewModel.refreshProgressTimeline()
                 },
                 onStartQuiz = { message: ChatMessage ->
-                    val quizJson = message.artifactJson?.toString() ?: message.planJson
+                    val isQuizArtifact = message.artifactType == "QUIZ"
+                    val quizJson = if (isQuizArtifact) (message.artifactJson?.toString() ?: message.planJson) else null
+                    var success = false
                     if (!quizJson.isNullOrBlank()) {
                         val questions = parseQuizFromJson(quizJson)
                         if (questions.isNotEmpty()) {
@@ -351,8 +355,10 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
                                 documentId = message.documentId
                             )
                             navController.navigate("quiz")
+                            success = true
                         }
-                    } else if (!message.documentId.isNullOrBlank()) {
+                    }
+                    if (!success && !message.documentId.isNullOrBlank()) {
                         quizViewModel.generateQuizForDocument(message.documentId)
                         navController.navigate("quiz")
                     }

@@ -46,6 +46,7 @@ class QuizViewModel : ViewModel() {
     private var currentQuizTitle by mutableStateOf("Quiz Session")
     var currentDocumentId by mutableStateOf<String?>(null)
     private var currentLessonId by mutableStateOf<String?>(null)
+    val isLessonBased: Boolean get() = !currentLessonId.isNullOrBlank()
     private var currentQuizId by mutableStateOf<String?>(null)
 
     val userAnswers = mutableStateListOf<Int>()
@@ -148,7 +149,7 @@ class QuizViewModel : ViewModel() {
     fun loadQuestions(
         newQuestions: List<QuizQuestion>,
         documentId: String? = currentDocumentId,
-        lessonId: String? = currentLessonId,
+        lessonId: String? = null,
         title: String? = currentQuizTitle,
         quizId: String? = null
     ) {
@@ -391,7 +392,9 @@ class QuizViewModel : ViewModel() {
                     }
 
                     !currentDocumentId.isNullOrBlank() -> {
-                        
+                        if (!currentQuizId.isNullOrBlank()) {
+                            return@launch
+                        }
                         val createDto = CreateQuizDto(
                             documentId = currentDocumentId!!,
                             questions = _questions.toList(),
@@ -567,6 +570,7 @@ class QuizViewModel : ViewModel() {
         quizGenerationError = null
         _questions.clear()
         currentDocumentId = documentId
+        currentLessonId = null
 
         viewModelScope.launch(Dispatchers.IO) {
             try {

@@ -156,6 +156,32 @@ class StudyPlanViewModel : ViewModel() {
         }
     }
 
+    fun fetchAndLoadStudyPlan(documentId: String, onSuccess: () -> Unit) {
+        viewModelScope.launch {
+            loading = true
+            errorMessage = null
+            try {
+                val response = RetrofitClient.instance.generateStudyPlan(documentId)
+                val studyPlanObj = response.studyPlan
+                if (studyPlanObj != null) {
+                    val rawJson = Gson().toJson(studyPlanObj)
+                    loadStudyPlanFromJson(rawJson)
+                    onSuccess()
+                } else {
+                    errorMessage = "Study plan from server was empty."
+                }
+            } catch (e: HttpException) {
+                handleHttpError(e)
+            } catch (_: IOException) {
+                errorMessage = "Network failure. Please check your connection."
+            } catch (e: Exception) {
+                errorMessage = e.localizedMessage ?: "Failed to fetch study plan."
+            } finally {
+                loading = false
+            }
+        }
+    }
+
     fun refreshProgressTimeline() {
         if (RetrofitClient.authToken.isNullOrBlank()) return
 
@@ -201,11 +227,18 @@ class StudyPlanViewModel : ViewModel() {
         val passed = rawScore >= PASSING_SCORE_THRESHOLD
         val newStatus = if (passed) ModuleStatus.COMPLETED else ModuleStatus.IN_PROGRESS
 
-        lessonStatuses = lessonStatuses + (lessonId to newStatus)
-        lessonScores = lessonScores + (lessonId to (normalizedScore / 10))
+        val existingScore = lessonScores[lessonId] ?: 0
+        val newScoreTenBase = normalizedScore / 10
+        val bestScore = maxOf(existingScore, newScoreTenBase)
 
-        if (passed) {
-            timeline = upsertTimeline(module.documentId, module.title, normalizedScore)
+        val existingStatus = lessonStatuses[lessonId]
+        val finalStatus = if (existingStatus == ModuleStatus.COMPLETED) ModuleStatus.COMPLETED else newStatus
+
+        lessonStatuses = lessonStatuses + (lessonId to finalStatus)
+        lessonScores = lessonScores + (lessonId to bestScore)
+
+        if (passed || existingStatus == ModuleStatus.COMPLETED) {
+            timeline = upsertTimeline(module.documentId, module.title, bestScore * 10)
         }
         persistStudyPlanState()
 
@@ -228,7 +261,7 @@ class StudyPlanViewModel : ViewModel() {
                 if (!backendLessonId.isNullOrBlank()) {
                     RetrofitClient.instance.updateProgressLessonStatus(
                         backendLessonId,
-                        ProgressLessonStatusRequest(status = "COMPLETED")
+                        ProgressLessonStatusRequest(status = "COMPLETED", score = bestScore * 10)
                     )
                 }
                 refreshProgressTimeline()
@@ -472,7 +505,9 @@ class StudyPlanViewModel : ViewModel() {
         val existing = runCatching { RetrofitClient.instance.getProgressLessons() }
             .getOrNull()
             ?.firstOrNull { candidate ->
-                candidate.documentId == module.documentId || normalizeText(candidate.title) == normalizeText(module.title)
+                val sameDoc = (candidate.documentId.isNullOrBlank() && module.documentId.isNullOrBlank()) ||
+                        (candidate.documentId == module.documentId)
+                sameDoc && normalizeText(candidate.lessonTitle ?: candidate.title) == normalizeText(module.title)
             }
         if (existing != null) return existing.id
 
@@ -496,16 +531,11 @@ class StudyPlanViewModel : ViewModel() {
     }
 
     private fun matchModuleForProgressLesson(backend: ProgressLesson, modules: List<StudyModule>): StudyModule? {
-        val titleMatch = modules.find { 
-            normalizeText(it.title) == normalizeText(backend.lessonTitle ?: backend.title) 
+        return modules.find { module ->
+            val sameDoc = (backend.documentId.isNullOrBlank() && module.documentId.isNullOrBlank()) ||
+                    (backend.documentId == module.documentId)
+            sameDoc && normalizeText(module.title) == normalizeText(backend.lessonTitle ?: backend.title)
         }
-        if (titleMatch != null) return titleMatch
-
-        if (!backend.documentId.isNullOrBlank()) {
-            val docMatch = modules.find { it.documentId == backend.documentId }
-            if (docMatch != null) return docMatch
-        }
-        return null
     }
 
     private fun progressLessonToEnrichment(progressLesson: ProgressLesson, module: StudyModule): LessonEnrichment? {

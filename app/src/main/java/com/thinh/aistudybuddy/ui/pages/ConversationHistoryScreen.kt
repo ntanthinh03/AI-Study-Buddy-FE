@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.Style
 import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.material3.Button
@@ -79,7 +80,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 
 enum class HistoryTab {
-    QUIZ, FLASHCARD, STUDY_PLAN, PDF
+    QUIZ, FLASHCARD, STUDY_PLAN, FILE
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -116,7 +117,7 @@ fun ConversationHistoryScreen(
     val studyPlanItems = allMessages.filter { it.showStudyPlanButton }
         .distinctBy { it.id }
     
-    val pdfItems = allMessages.filter { !it.attachmentName.isNullOrBlank() }
+    val fileItems = allMessages.filter { !it.attachmentName.isNullOrBlank() || !it.imageOriginalName.isNullOrBlank() }
         .distinctBy { it.id }
 
     val screenTitle = if (conversation?.autoTitleApplied == true && conversation.title.isNotBlank()) {
@@ -129,7 +130,7 @@ fun ConversationHistoryScreen(
         HistoryTab.QUIZ -> quizItems
         HistoryTab.FLASHCARD -> flashcardItems
         HistoryTab.STUDY_PLAN -> studyPlanItems
-        HistoryTab.PDF -> pdfItems
+        HistoryTab.FILE -> fileItems
     }
 
     Box(modifier = Modifier.fillMaxSize().background(DeepSpaceBackground)) {
@@ -214,7 +215,7 @@ fun ConversationHistoryScreen(
                                 HistoryTab.QUIZ -> PrimaryNeonTeal
                                 HistoryTab.FLASHCARD -> SecondaryTangerine
                                 HistoryTab.STUDY_PLAN -> PrimaryNeonTeal
-                                HistoryTab.PDF -> SecondaryTangerine
+                                HistoryTab.FILE -> SecondaryTangerine
                             }
                         )
                     }
@@ -229,7 +230,7 @@ fun ConversationHistoryScreen(
                                         HistoryTab.QUIZ -> "Quiz"
                                         HistoryTab.FLASHCARD -> "Flashcards"
                                         HistoryTab.STUDY_PLAN -> "Study Plan"
-                                        HistoryTab.PDF -> "Docs"
+                                        HistoryTab.FILE -> "Files"
                                     },
                                     color = if (selectedTab == tab) Color.White else Color.White.copy(alpha = 0.5f),
                                     fontWeight = if (selectedTab == tab) FontWeight.Bold else FontWeight.Normal
@@ -249,7 +250,7 @@ fun ConversationHistoryScreen(
                                     HistoryTab.QUIZ -> Icons.Default.Quiz
                                     HistoryTab.FLASHCARD -> Icons.Default.Style
                                     HistoryTab.STUDY_PLAN -> Icons.Default.School
-                                    HistoryTab.PDF -> Icons.Default.PictureAsPdf
+                                    HistoryTab.FILE -> Icons.Default.Image
                                 },
                                 contentDescription = null,
                                 tint = Color.White.copy(alpha = 0.3f),
@@ -340,6 +341,7 @@ private fun HistoryArtifactCard(
         message.showFlashcardButton || message.artifactType == "FLASHCARDS" -> Triple(Icons.Default.Style, "Flashcards", Color(0xFFE91E63))
         message.showStudyPlanButton -> Triple(Icons.Default.School, "Study Plan", Color(0xFF4CAF50))
         !message.attachmentName.isNullOrBlank() -> Triple(Icons.Default.PictureAsPdf, "PDF Document", Color(0xFFE53935))
+        !message.imageOriginalName.isNullOrBlank() -> Triple(Icons.Default.Image, "Image Attachment", Color(0xFF00E5FF))
         message.showMindMapButton -> Triple(Icons.Default.AccountTree, "Mind Map", Color(0xFFFF9800))
         else -> Triple(Icons.Default.Info, "Document", Color.Gray)
     }
@@ -399,6 +401,7 @@ private fun HistoryArtifactCard(
         !message.specificTitle.isNullOrBlank() -> message.specificTitle
         !message.messageLabel.isNullOrBlank() -> message.messageLabel
         !message.attachmentName.isNullOrBlank() -> message.attachmentName
+        !message.imageOriginalName.isNullOrBlank() -> message.imageOriginalName
         message.courses.isNotEmpty() -> message.courses.first().title
         else -> null
     }
@@ -456,6 +459,7 @@ private fun HistoryArtifactCard(
                         message.text.contains("week 4", ignoreCase = true)
                     val displayText = when {
                         !message.attachmentName.isNullOrBlank() -> "Document uploaded: ${message.attachmentName}"
+                        !message.imageOriginalName.isNullOrBlank() -> "Image uploaded: ${message.imageOriginalName}"
                         message.showQuizButton -> "Quiz questions have been created."
                         message.showFlashcardButton || message.artifactType == "FLASHCARDS" -> "Flashcard deck has been created."
                         isStudyPlanMessage -> "Study plan has been established."
@@ -555,6 +559,7 @@ private fun HistoryArtifactCard(
                     message.text.contains("week 4", ignoreCase = true)
                 val displayTextShort = when {
                     !message.attachmentName.isNullOrBlank() -> "Document uploaded: ${message.attachmentName}"
+                    !message.imageOriginalName.isNullOrBlank() -> "Image uploaded: ${message.imageOriginalName}"
                     message.showQuizButton -> "Quiz questions have been created."
                     message.showFlashcardButton || message.artifactType == "FLASHCARDS" -> "Flashcard deck has been created."
                     isStudyPlanMessage -> "Study plan has been established."

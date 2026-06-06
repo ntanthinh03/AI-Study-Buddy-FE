@@ -799,6 +799,7 @@ class ChatViewModel : ViewModel() {
                 documentId = documentId ?: updatedConv.documentId,
                 artifactType = artifactType,
                 artifactJson = artifactJson,
+                planJson = if (isPlan) artifactJson?.toString() else null,
                 createdAt = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
             )
         )
@@ -820,6 +821,30 @@ class ChatViewModel : ViewModel() {
         )
         _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages.toMutableList())
         return messageId
+    }
+
+    private fun updateMessageImageAttachment(
+        convId: String,
+        attachmentName: String,
+        imageBase64: String,
+        imageMimeType: String,
+        imageOriginalName: String
+    ) {
+        val index = _conversations.indexOfFirst { it.id == convId }
+        if (index == -1) return
+
+        val updatedConv = _conversations[index]
+        val messageIndex = updatedConv.chatMessages.indexOfLast {
+            it.isUser && it.attachmentName == attachmentName && it.imageBase64.isNullOrBlank()
+        }
+        if (messageIndex == -1) return
+
+        updatedConv.chatMessages[messageIndex] = updatedConv.chatMessages[messageIndex].copy(
+            imageBase64 = imageBase64,
+            imageMimeType = imageMimeType,
+            imageOriginalName = imageOriginalName
+        )
+        _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages.toMutableList())
     }
 
     private fun replaceMessage(convId: String, messageId: String, newText: String) {
@@ -979,17 +1004,19 @@ class ChatViewModel : ViewModel() {
                 "AI returned an empty response. Please try again."
             }
 
-            val showQuiz = askResponse.artifactType == "QUIZ"
-            val showPlan = askResponse.artifactType == "STUDY_PLAN"
-            val showFlashcards = askResponse.artifactType == "FLASHCARDS"
-            val showMindMap = askResponse.artifactType == "MINDMAP"
-
             val resolvedIndex = _conversations.indexOfFirst { it.id == resolvedConversationId }
             if (resolvedIndex == -1) {
                 isTyping = false
                 return
             }
             val updatedConv = _conversations[resolvedIndex]
+
+            val showQuiz = askResponse.artifactType == "QUIZ"
+            val showPlan = askResponse.artifactType == "STUDY_PLAN" &&
+                    updatedConv.chatMessages.none { it.showStudyPlanButton }
+            val showFlashcards = askResponse.artifactType == "FLASHCARDS"
+            val showMindMap = askResponse.artifactType == "MINDMAP"
+
             updatedConv.chatMessages.add(
                 ChatMessage(
                     id = askResponse.messageId,
@@ -1397,6 +1424,7 @@ class ChatViewModel : ViewModel() {
                     }
                 }
             } catch (e: Exception) {
+                Log.e("ChatViewModel", "refreshConversationMessages | failed for conversationId=$conversationId", e)
                 if (e is HttpException) {
                     if (e.code() == 404) {
                         _conversations.removeIf { it.id == conversationId }
@@ -1906,6 +1934,36 @@ class ChatViewModel : ViewModel() {
                 }.getOrNull()
 
                 when (artifactType) {
+                    "QUIZ" -> messages.add(
+                        ChatMessage(
+                            id = "hist-artifact-quiz-${item.id}",
+                            text = label ?: "Quiz is ready. Tap Start Quiz to practice.",
+                            isUser = false,
+                            showQuizButton = true,
+                            messageLabel = label,
+                            specificTitle = specificTitle,
+                            messageType = messageType,
+                            artifactType = artifactType,
+                            artifactJson = item.artifactJson,
+                            documentId = docIdToUse,
+                            createdAt = item.createdAt
+                        )
+                    )
+                    "FLASHCARDS" -> messages.add(
+                        ChatMessage(
+                            id = "hist-artifact-flashcards-${item.id}",
+                            text = label ?: "Flashcards are ready. Tap View Flashcards to study.",
+                            isUser = false,
+                            showFlashcardButton = true,
+                            messageLabel = label,
+                            specificTitle = specificTitle,
+                            messageType = messageType,
+                            artifactType = artifactType,
+                            artifactJson = item.artifactJson,
+                            documentId = docIdToUse,
+                            createdAt = item.createdAt
+                        )
+                    )
                     "STUDY_PLAN" -> messages.add(
                         ChatMessage(
                             id = "hist-artifact-plan-${item.id}",
@@ -1940,7 +1998,7 @@ class ChatViewModel : ViewModel() {
                 }
                 return@forEach
             }
-            if (item.question.isNotBlank()) {
+            if (item.question.isNotBlank() || !item.attachmentName.isNullOrBlank()) {
                 val localAttachment = localMessages.firstOrNull {
                     it.isUser && it.text == item.question && !it.attachmentName.isNullOrBlank()
                 }
@@ -1950,7 +2008,7 @@ class ChatViewModel : ViewModel() {
                 messages.add(
                     ChatMessage(
                         id = "hist-user-${item.id}",
-                        text = item.question,
+                        text = item.question.ifBlank { item.attachmentName.orEmpty() },
                         isUser = true,
                         attachmentName = item.attachmentName ?: localAttachment?.attachmentName,
                         imageBase64 = null,
@@ -1963,17 +2021,19 @@ class ChatViewModel : ViewModel() {
             }
             if (item.answer.isNotBlank()) {
                 val answerText = item.answer.trim()
-                val isStudyPlan = artifactType == "STUDY_PLAN" || looksLikeStudyPlanAnswer(answerText)
-                
-                val hasAlreadyAddedQuiz = messages.any { it.showQuizButton && it.id.contains(item.id) }
+                val isStudyPlan = artifactType == "STUDY_PLAN"
+                val hasStudyPlanButton = messages.any { it.showStudyPlanButton }
+                val hasQuizButton = messages.any { it.showQuizButton }
+                val hasFlashcardButton = messages.any { it.showFlashcardButton }
                 
                 messages.add(
                     ChatMessage(
                         id = "hist-ai-${item.id}",
                         text = if (isStudyPlan) "Study plan is ready." else answerText,
                         isUser = false,
-                        showStudyPlanButton = isStudyPlan,
-                        showFlashcardButton = artifactType == "FLASHCARDS",
+                        showStudyPlanButton = isStudyPlan && !hasStudyPlanButton,
+                        showQuizButton = (artifactType == "QUIZ") && !hasQuizButton,
+                        showFlashcardButton = (artifactType == "FLASHCARDS") && !hasFlashcardButton,
                         artifactType = if (isStudyPlan) "STUDY_PLAN" else item.artifactType,
                         planJson = if (isStudyPlan) item.artifactJson?.toString() else null,
                         documentId = docIdToUse,
@@ -2064,21 +2124,28 @@ class ChatViewModel : ViewModel() {
                 var processingMessageId = ""
 
                 try {
-                    val bytes = contentResolver.openInputStream(imageUri)?.use { it.readBytes() }
-                        ?: throw IllegalArgumentException("Could not read image file.")
-
-                    val localBase64 = android.util.Base64.encodeToString(bytes, android.util.Base64.DEFAULT)
-
                     appendUserMessage(
                         convId = conversationForImage,
                         text = question,
+                        attachmentName = fileName
+                    )
+                    persistChatState()
+                    logTurn(turnId, "user_sent_image", conversationForImage)
+
+                    val bytes = withContext(Dispatchers.IO) {
+                        contentResolver.openInputStream(imageUri)?.use { it.readBytes() }
+                            ?: throw IllegalArgumentException("Could not read image file.")
+                    }
+                    val localBase64 = android.util.Base64.encodeToString(bytes, android.util.Base64.DEFAULT)
+
+                    updateMessageImageAttachment(
+                        convId = conversationForImage,
                         attachmentName = fileName,
                         imageBase64 = localBase64,
                         imageMimeType = mimeType,
                         imageOriginalName = fileName
                     )
                     persistChatState()
-                    logTurn(turnId, "user_sent_image", conversationForImage)
 
                     processingMessageId = appendProcessingMessage(conversationForImage, "Analyzing image...")
                     persistChatState()
@@ -2117,6 +2184,7 @@ class ChatViewModel : ViewModel() {
 
                     appendAiMessage(resolvedConversationId, response.answer, response.messageId)
                     persistChatState()
+                    selectConversation(resolvedConversationId)
                     logTurn(turnId, "ai_reply_appended", resolvedConversationId, "source=chat_ask_image")
 
                     uploadTerminalStatus = "COMPLETED"

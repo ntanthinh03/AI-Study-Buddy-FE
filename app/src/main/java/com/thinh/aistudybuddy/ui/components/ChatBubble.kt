@@ -36,7 +36,10 @@ fun ChatBubble(
     onGenerateFlashcards: (documentId: String) -> Unit,
     onGenerateMindMap: (documentId: String) -> Unit,
     onSpeakClick: (String) -> Unit = {},
-    showArtifactButtons: Boolean = false
+    showArtifactButtons: Boolean = false,
+    showQuizBtn: Boolean = true,
+    showFlashcardBtn: Boolean = true,
+    showMindMapBtn: Boolean = true
 ) {
     Row(
         modifier = Modifier
@@ -57,12 +60,7 @@ fun ChatBubble(
             Spacer(modifier = Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                val isStudyPlanMessage = message.showStudyPlanButton || message.artifactType == "STUDY_PLAN" ||
-                    message.text.contains("study plan", ignoreCase = true) ||
-                    message.text.contains("week 1", ignoreCase = true) ||
-                    message.text.contains("week 2", ignoreCase = true) ||
-                    message.text.contains("week 3", ignoreCase = true) ||
-                    message.text.contains("week 4", ignoreCase = true)
+                val isStudyPlanMessage = message.showStudyPlanButton || message.artifactType == "STUDY_PLAN"
                 val displayText = when {
                     isStudyPlanMessage -> "Study plan is ready."
                     else -> message.text
@@ -117,40 +115,46 @@ fun ChatBubble(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Button(
-                            onClick = { onStartQuiz(message) },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E5FF)),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.weight(1f),
-                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
-                        ) {
-                            Icon(Icons.Filled.Help, null, tint = Color.Black, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("Quiz", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp, maxLines = 1)
+                        if (showQuizBtn) {
+                            Button(
+                                onClick = { onStartQuiz(message) },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E5FF)),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
+                            ) {
+                                Icon(Icons.Filled.Help, null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Quiz", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp, maxLines = 1)
+                            }
                         }
 
-                        Button(
-                            onClick = { onGenerateFlashcards(message.documentId) },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF64B5F6)),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.weight(1f),
-                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
-                        ) {
-                            Icon(Icons.Filled.ViewCarousel, null, tint = Color.White, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("Flashcards", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp, maxLines = 1)
+                        if (showFlashcardBtn) {
+                            Button(
+                                onClick = { onGenerateFlashcards(message.documentId) },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF64B5F6)),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
+                            ) {
+                                Icon(Icons.Filled.ViewCarousel, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Flashcards", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp, maxLines = 1)
+                            }
                         }
 
-                        Button(
-                            onClick = { onGenerateMindMap(message.documentId) },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800)),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.weight(1f),
-                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
-                        ) {
-                            Icon(Icons.Filled.AccountTree, null, tint = Color.White, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("Mind Map", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp, maxLines = 1)
+                        if (showMindMapBtn) {
+                            Button(
+                                onClick = { onGenerateMindMap(message.documentId) },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800)),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
+                            ) {
+                                Icon(Icons.Filled.AccountTree, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Mind Map", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp, maxLines = 1)
+                            }
                         }
                     }
                 } else {

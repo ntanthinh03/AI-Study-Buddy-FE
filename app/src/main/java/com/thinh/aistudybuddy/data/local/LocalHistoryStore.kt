@@ -271,12 +271,7 @@ object LocalHistoryStore {
     )
 
     private fun CachedChatMessage.isStudyPlanMessage(): Boolean {
-        return showStudyPlanButton || artifactType?.equals("STUDY_PLAN", ignoreCase = true) == true ||
-            text.contains("study plan", ignoreCase = true) ||
-            text.contains("week 1", ignoreCase = true) ||
-            text.contains("week 2", ignoreCase = true) ||
-            text.contains("week 3", ignoreCase = true) ||
-            text.contains("week 4", ignoreCase = true)
+        return showStudyPlanButton || artifactType?.equals("STUDY_PLAN", ignoreCase = true) == true
     }
 }
 

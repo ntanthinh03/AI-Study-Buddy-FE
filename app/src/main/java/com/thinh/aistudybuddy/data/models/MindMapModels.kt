@@ -14,7 +14,7 @@ data class MindMapResponse(
     val content: List<MindMapNode>,
     val userId: String,
     val documentId: String?,
-    val createdAt: Date
+    val createdAt: String
 )
 
 data class MindMapCreateRequest(

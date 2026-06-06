@@ -506,19 +506,25 @@ class StudyRoomViewModel : ViewModel() {
                 
 
                 var latest: Document = uploaded
-                repeat(20) {
+                var isCompleted = false
+                for (attempt in 1..30) {
+                    delay(1000)
                     val docList = runCatching { api.getDocuments() }.getOrNull()
                     val found = docList?.firstOrNull { it.id == uploaded.id }
                     if (found != null) {
                         latest = found
                         val raw = (found.summaryStatus ?: found.status).trim().uppercase()
-                        if (raw == "COMPLETED" || raw == "PROCESSING") {
-                            return@repeat
+                        if (raw == "COMPLETED") {
+                            isCompleted = true
+                            break
+                        } else if (raw == "FAILED") {
+                            throw Exception("Document processing failed on the server.")
                         }
                     }
-                    delay(1000)
                 }
-                
+                if (!isCompleted) {
+                    throw Exception("Document processing timed out.")
+                }
                 selectDocumentForQuiz(roomCode, latest)
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e

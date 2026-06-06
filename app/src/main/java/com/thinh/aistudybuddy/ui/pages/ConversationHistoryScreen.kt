@@ -448,11 +448,17 @@ private fun HistoryArtifactCard(
             androidx.compose.animation.AnimatedVisibility(visible = expanded) {
                 Column {
                     Spacer(modifier = Modifier.height(12.dp))
+                    val isStudyPlanMessage = message.showStudyPlanButton || message.artifactType == "STUDY_PLAN" ||
+                        message.text.contains("study plan", ignoreCase = true) ||
+                        message.text.contains("week 1", ignoreCase = true) ||
+                        message.text.contains("week 2", ignoreCase = true) ||
+                        message.text.contains("week 3", ignoreCase = true) ||
+                        message.text.contains("week 4", ignoreCase = true)
                     val displayText = when {
                         !message.attachmentName.isNullOrBlank() -> "Document uploaded: ${message.attachmentName}"
                         message.showQuizButton -> "Quiz questions have been created."
                         message.showFlashcardButton || message.artifactType == "FLASHCARDS" -> "Flashcard deck has been created."
-                        message.showStudyPlanButton -> "Study plan has been established."
+                        isStudyPlanMessage -> "Study plan has been established."
                         else -> message.text
                     }
                     Text(
@@ -493,7 +499,7 @@ private fun HistoryArtifactCard(
                                 Text("View Flashcards", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                             }
                         }
-                        if (message.showStudyPlanButton) {
+                        if (isStudyPlanMessage) {
                             Button(
                                 onClick = onCheckPlan,
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
@@ -503,7 +509,7 @@ private fun HistoryArtifactCard(
                             ) {
                                 Icon(Icons.Default.Visibility, null, tint = Color.White, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("View Plan", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Text("Check Plan", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                             }
                         }
                         if (!message.attachmentName.isNullOrBlank()) {
@@ -541,11 +547,17 @@ private fun HistoryArtifactCard(
             
             if (!expanded) {
                 Spacer(modifier = Modifier.height(8.dp))
+                val isStudyPlanMessage = message.showStudyPlanButton || message.artifactType == "STUDY_PLAN" ||
+                    message.text.contains("study plan", ignoreCase = true) ||
+                    message.text.contains("week 1", ignoreCase = true) ||
+                    message.text.contains("week 2", ignoreCase = true) ||
+                    message.text.contains("week 3", ignoreCase = true) ||
+                    message.text.contains("week 4", ignoreCase = true)
                 val displayTextShort = when {
                     !message.attachmentName.isNullOrBlank() -> "Document uploaded: ${message.attachmentName}"
                     message.showQuizButton -> "Quiz questions have been created."
                     message.showFlashcardButton || message.artifactType == "FLASHCARDS" -> "Flashcard deck has been created."
-                    message.showStudyPlanButton -> "Study plan has been established."
+                    isStudyPlanMessage -> "Study plan has been established."
                     else -> message.text
                 }
                 Text(

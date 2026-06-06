@@ -129,7 +129,7 @@ fun DailySessionScreen(
                     } else if (viewModel.isFinished) {
                         SessionSummary(viewModel, onBack)
                     } else if (viewModel.reviewModeActive) {
-                        QuizReviewContent(viewModel)
+                        QuizReviewContent(viewModel, onBack)
                     } else if (viewModel.wasAlreadyCompleted && !viewModel.reviewModeActive) {
                         AlreadyCompletedState(viewModel)
                     } else if (viewModel.session == null) {
@@ -358,7 +358,10 @@ fun ActiveSessionContent(viewModel: DailySessionViewModel) {
 }
 
 @Composable
-fun QuizReviewContent(viewModel: DailySessionViewModel) {
+fun QuizReviewContent(
+    viewModel: DailySessionViewModel,
+    onBack: () -> Unit
+) {
     val session = viewModel.session!!
     val quizQuestions = session.content.quizQuestions
     val userAnswers = viewModel.userAnswers
@@ -385,6 +388,7 @@ fun QuizReviewContent(viewModel: DailySessionViewModel) {
 
         quizQuestions.forEachIndexed { index, question ->
             val selected = userAnswers[index]
+            val hasAnswered = selected != null
             val isCorrect = selected == question.correctAnswer
 
             Box(
@@ -394,7 +398,9 @@ fun QuizReviewContent(viewModel: DailySessionViewModel) {
                     .glassCard(shape = RoundedCornerShape(18.dp), backgroundColor = SurfaceCardContainer.copy(alpha = 0.4f))
                     .border(
                         1.dp,
-                        if (isCorrect) EmeraldSuccess.copy(alpha = 0.4f) else RoseWarning.copy(alpha = 0.4f),
+                        if (!hasAnswered) PrimaryNeonTeal.copy(alpha = 0.3f)
+                        else if (isCorrect) EmeraldSuccess.copy(alpha = 0.4f)
+                        else RoseWarning.copy(alpha = 0.4f),
                         RoundedCornerShape(18.dp)
                     )
                     .padding(16.dp)
@@ -407,16 +413,20 @@ fun QuizReviewContent(viewModel: DailySessionViewModel) {
                     ) {
                         Text(
                             text = "Question ${index + 1}",
-                            color = if (isCorrect) EmeraldSuccess else RoseWarning,
+                            color = if (!hasAnswered) Color.White
+                                    else if (isCorrect) EmeraldSuccess
+                                    else RoseWarning,
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp
                         )
-                        Icon(
-                            imageVector = if (isCorrect) Icons.Default.Check else Icons.Default.Close,
-                            contentDescription = null,
-                            tint = if (isCorrect) EmeraldSuccess else RoseWarning,
-                            modifier = Modifier.size(20.dp)
-                        )
+                        if (hasAnswered) {
+                            Icon(
+                                imageVector = if (isCorrect) Icons.Default.Check else Icons.Default.Close,
+                                contentDescription = null,
+                                tint = if (isCorrect) EmeraldSuccess else RoseWarning,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                     }
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
@@ -472,7 +482,13 @@ fun QuizReviewContent(viewModel: DailySessionViewModel) {
 
         Spacer(modifier = Modifier.height(24.dp))
         Button(
-            onClick = { viewModel.completeSessionAfterReview() },
+            onClick = {
+                if (viewModel.wasAlreadyCompleted) {
+                    onBack()
+                } else {
+                    viewModel.completeSessionAfterReview()
+                }
+            },
             modifier = Modifier.fillMaxWidth().height(56.dp),
             colors = ButtonDefaults.buttonColors(containerColor = PrimaryNeonTeal, contentColor = Color.Black),
             shape = RoundedCornerShape(14.dp)

@@ -32,6 +32,7 @@ import com.thinh.aistudybuddy.ui.theme.*
 @Composable
 fun ChatDrawer(
     userDisplayName: String,
+    userAvatar: String? = null,
     searchQuery: String,
     conversations: List<Conversation>,
     pendingConversations: List<Conversation>,
@@ -501,6 +502,8 @@ fun ChatDrawer(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 UserAvatar(
+                    avatar = userAvatar,
+                    fullName = userDisplayName,
                     size = 40.dp,
                     onClick = onAccountClick
                 )

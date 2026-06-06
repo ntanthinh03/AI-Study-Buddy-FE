@@ -256,12 +256,12 @@ object LocalHistoryStore {
 
     private fun CachedChatMessage.toRuntime(): ChatMessage = ChatMessage(
         id = id,
-        text = text,
+        text = if (isStudyPlanMessage()) "Study plan is ready." else text,
         isUser = isUser,
         attachmentName = attachmentName,
         showQuizButton = showQuizButton,
-        showStudyPlanButton = showStudyPlanButton,
-        showFlashcardButton = showFlashcardButton,
+        showStudyPlanButton = isStudyPlanMessage(),
+        showFlashcardButton = showFlashcardButton && artifactType?.equals("FLASHCARDS", ignoreCase = true) == true,
         showMindMapButton = showMindMapButton,
         documentId = documentId,
         planJson = planJson,
@@ -269,5 +269,14 @@ object LocalHistoryStore {
         artifactJson = artifactJson,
         createdAt = createdAt
     )
+
+    private fun CachedChatMessage.isStudyPlanMessage(): Boolean {
+        return showStudyPlanButton || artifactType?.equals("STUDY_PLAN", ignoreCase = true) == true ||
+            text.contains("study plan", ignoreCase = true) ||
+            text.contains("week 1", ignoreCase = true) ||
+            text.contains("week 2", ignoreCase = true) ||
+            text.contains("week 3", ignoreCase = true) ||
+            text.contains("week 4", ignoreCase = true)
+    }
 }
 

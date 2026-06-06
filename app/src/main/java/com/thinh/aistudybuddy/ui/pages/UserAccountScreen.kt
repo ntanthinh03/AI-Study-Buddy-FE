@@ -49,10 +49,10 @@ import com.thinh.aistudybuddy.viewmodel.UserAccountViewModel
 fun UserAccountScreen(
     onBack: () -> Unit,
     onLogout: () -> Unit,
-    onChangePassword: () -> Unit
+    onChangePassword: () -> Unit,
+    viewModel: UserAccountViewModel = viewModel()
 ) {
     val context = LocalContext.current
-    val viewModel: UserAccountViewModel = viewModel()
 
     LaunchedEffect(Unit) {
         viewModel.loadProfile()

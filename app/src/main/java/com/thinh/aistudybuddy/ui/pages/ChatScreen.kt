@@ -48,6 +48,7 @@ import java.util.Locale
 @Composable
 fun ChatScreen(
     userDisplayName: String,
+    userAvatar: String? = null,
     quizViewModel: QuizViewModel,
     studyPlanViewModel: StudyPlanViewModel,
     onProfileClick: () -> Unit,
@@ -112,8 +113,6 @@ fun ChatScreen(
     var showDeleteDialog by remember { mutableStateOf(false) }
     var conversationToDelete by remember { mutableStateOf<String?>(null) }
     var newTitle by remember { mutableStateOf("") }
-    var pendingImageUri by remember { mutableStateOf<android.net.Uri?>(null) }
-    var pendingImageName by remember { mutableStateOf<String?>(null) }
     val activeConversation = viewModel.conversations.find { it.id == viewModel.activeConversationId }
     val listState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -144,8 +143,7 @@ fun ChatScreen(
                         uriPath.endsWith(".gif") -> "image.gif"
                         else -> "image.jpg"
                     }
-                    pendingImageUri = uri
-                    pendingImageName = imageName
+                    viewModel.setPendingImage(uri, imageName)
                 } else {
                     viewModel.errorMessage = "Unsupported file type. Please choose a PDF or image."
                 }
@@ -255,6 +253,7 @@ fun ChatScreen(
         drawerContent = {
             ChatDrawer(
                 userDisplayName = userDisplayName,
+                userAvatar = userAvatar,
                 searchQuery = viewModel.searchQuery,
                 conversations = viewModel.filteredConversations,
                 pendingConversations = viewModel.pendingConversations,
@@ -394,7 +393,12 @@ fun ChatScreen(
                                 }
                                 Spacer(modifier = Modifier.width(8.dp))
                             }
-                            UserAvatar(size = 32.dp, onClick = onProfileClick)
+                             UserAvatar(
+                                 avatar = userAvatar,
+                                 fullName = userDisplayName,
+                                 size = 32.dp,
+                                 onClick = onProfileClick
+                             )
                         }
                     }
                 },
@@ -478,90 +482,29 @@ fun ChatScreen(
                 }
             }
 
-            if (pendingImageUri != null) {
-                Surface(color = Color(0xFF2C2C2E)) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Ask a question about this image:", color = Color.White, fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(pendingImageName ?: "image", color = Color.Gray, fontSize = 12.sp)
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(Color(0xFF1E1E1E), RoundedCornerShape(12.dp))
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.Bottom,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            TextField(
-                                value = inputText,
-                                onValueChange = { inputText = it },
-                                placeholder = { Text("Ask about the image...", color = Color.Gray) },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .heightIn(min = 40.dp, max = 100.dp),
-                                colors = TextFieldDefaults.colors(
-                                    focusedContainerColor = Color.Transparent,
-                                    unfocusedContainerColor = Color.Transparent,
-                                    focusedIndicatorColor = Color.Transparent,
-                                    unfocusedIndicatorColor = Color.Transparent,
-                                    focusedTextColor = Color.White,
-                                    unfocusedTextColor = Color.White,
-                                    cursorColor = Color(0xFF00E5FF)
-                                )
-                            )
-                            
-                            IconButton(
-                                onClick = {
-                                    pendingImageUri = null
-                                    pendingImageName = null
-                                    inputText = ""
-                                }
-                            ) {
-                                Icon(Icons.Default.Close, contentDescription = "Cancel", tint = Color.Gray)
-                            }
-                            
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .background(if (inputText.isNotBlank()) Color(0xFF00E5FF) else Color(0xFF303030))
-                                    .clickable(enabled = inputText.isNotBlank()) {
-                                        viewModel.sendImageQuestion(context, pendingImageUri!!, inputText)
-                                        inputText = ""
-                                        pendingImageUri = null
-                                        pendingImageName = null
-                                    },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.Send,
-                                    contentDescription = "Send",
-                                    tint = if (inputText.isNotBlank()) Color.Black else Color.Gray,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
+            ChatInputBar(
+                inputText = inputText,
+                pendingAttachmentName = viewModel.pendingPdfName ?: viewModel.pendingImageName,
+                isImage = viewModel.pendingImageName != null,
+                onInputTextChange = { inputText = it },
+                onSendMessageClick = {
+                    if (!viewModel.pendingPdfName.isNullOrBlank()) {
+                        viewModel.sendMessageWithPendingPdf(context, inputText)
+                        inputText = ""
+                    } else if (!viewModel.pendingImageName.isNullOrBlank()) {
+                        viewModel.sendMessageWithPendingImage(context, inputText)
+                        inputText = ""
+                    } else if (inputText.isNotBlank()) {
+                        viewModel.sendMessage(inputText)
+                        inputText = ""
                     }
-                }
-            } else {
-                ChatInputBar(
-                    inputText = inputText,
-                    pendingAttachmentName = viewModel.pendingPdfName,
-                    onInputTextChange = { inputText = it },
-                    onSendMessageClick = {
-                        if (!viewModel.pendingPdfName.isNullOrBlank()) {
-                            viewModel.sendMessageWithPendingPdf(context, inputText)
-                            inputText = ""
-                        } else if (inputText.isNotBlank()) {
-                            viewModel.sendMessage(inputText)
-                            inputText = ""
-                        }
-                    },
-                    onRemoveAttachment = { viewModel.clearPendingPdf() },
-                    onAddClick = { filePickerLauncher.launch("application/pdf") }
-                )
-            }
+                },
+                onRemoveAttachment = {
+                    viewModel.clearPendingPdf()
+                    viewModel.clearPendingImage()
+                },
+                onAddClick = { filePickerLauncher.launch("*/*") }
+            )
         }
     }
 }

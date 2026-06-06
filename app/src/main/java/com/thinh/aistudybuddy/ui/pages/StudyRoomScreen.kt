@@ -841,49 +841,85 @@ fun LobbyView(
                             modifier = Modifier.weight(1f).fillMaxWidth()
                         ) {
                             items(documents) { doc ->
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .glassCard(shape = RoundedCornerShape(16.dp), backgroundColor = SurfaceCardContainer.copy(alpha = 0.4f))
-                                        .cyberBorder(shape = RoundedCornerShape(16.dp), borderWidth = 1.dp, startColor = Color.White.copy(alpha = 0.05f), endColor = Color.White.copy(alpha = 0.05f))
-                                        .clickable {
-                                            docToConfirm = doc
-                                            showDocSelector = false
-                                        }
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(16.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(36.dp)
-                                                .glassCard(shape = RoundedCornerShape(8.dp), backgroundColor = StudyRoomSecondary.copy(alpha = 0.1f)),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(Icons.Default.PictureAsPdf, null, tint = StudyRoomSecondary, modifier = Modifier.size(20.dp))
-                                        }
-                                        Spacer(Modifier.width(12.dp))
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = doc.fileName,
-                                                color = Color.White,
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 14.sp,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                            Text(
-                                                text = doc.createdAt ?: "Recently Added",
-                                                color = Color.White.copy(alpha = 0.4f),
-                                                fontSize = 11.sp,
-                                                modifier = Modifier.padding(top = 2.dp)
-                                            )
-                                        }
-                                        Icon(Icons.Default.ChevronRight, null, tint = Color.White.copy(alpha = 0.3f))
-                                    }
-                                }
-                            }
+                                 val docStatus = (doc.summaryStatus ?: doc.status).trim().uppercase()
+                                 val isReady = docStatus == "COMPLETED"
+                                 val statusText = when (docStatus) {
+                                     "COMPLETED" -> "Ready"
+                                     "FAILED" -> "Failed"
+                                     else -> "Processing..."
+                                 }
+                                 val statusColor = when (docStatus) {
+                                     "COMPLETED" -> EmeraldSuccess
+                                     "FAILED" -> RoseWarning
+                                     else -> SecondaryTangerine
+                                 }
+
+                                 Box(
+                                     modifier = Modifier
+                                         .fillMaxWidth()
+                                         .glassCard(
+                                             shape = RoundedCornerShape(16.dp),
+                                             backgroundColor = if (isReady) SurfaceCardContainer.copy(alpha = 0.4f) else SurfaceCardContainer.copy(alpha = 0.15f)
+                                         )
+                                         .cyberBorder(shape = RoundedCornerShape(16.dp), borderWidth = 1.dp, startColor = Color.White.copy(alpha = 0.05f), endColor = Color.White.copy(alpha = 0.05f))
+                                         .clickable(enabled = isReady) {
+                                             docToConfirm = doc
+                                             showDocSelector = false
+                                         }
+                                 ) {
+                                     Row(
+                                         modifier = Modifier.padding(16.dp),
+                                         verticalAlignment = Alignment.CenterVertically
+                                     ) {
+                                         Box(
+                                             modifier = Modifier
+                                                 .size(36.dp)
+                                                 .glassCard(shape = RoundedCornerShape(8.dp), backgroundColor = if (isReady) StudyRoomSecondary.copy(alpha = 0.1f) else Color.White.copy(alpha = 0.05f)),
+                                             contentAlignment = Alignment.Center
+                                         ) {
+                                             Icon(
+                                                 imageVector = Icons.Default.PictureAsPdf,
+                                                 contentDescription = null,
+                                                 tint = if (isReady) StudyRoomSecondary else Color.White.copy(alpha = 0.2f),
+                                                 modifier = Modifier.size(20.dp)
+                                             )
+                                         }
+                                         Spacer(Modifier.width(12.dp))
+                                         Column(modifier = Modifier.weight(1f)) {
+                                             Text(
+                                                 text = doc.fileName,
+                                                 color = if (isReady) Color.White else Color.White.copy(alpha = 0.4f),
+                                                 fontWeight = FontWeight.Bold,
+                                                 fontSize = 14.sp,
+                                                 maxLines = 1,
+                                                 overflow = TextOverflow.Ellipsis
+                                             )
+                                             Row(
+                                                 modifier = Modifier.padding(top = 2.dp),
+                                                 verticalAlignment = Alignment.CenterVertically
+                                             ) {
+                                                 Text(
+                                                     text = doc.createdAt ?: "Recently Added",
+                                                     color = Color.White.copy(alpha = 0.3f),
+                                                     fontSize = 11.sp
+                                                 )
+                                                 Spacer(Modifier.width(8.dp))
+                                                 Box(modifier = Modifier.size(4.dp).clip(CircleShape).background(statusColor))
+                                                 Spacer(Modifier.width(4.dp))
+                                                 Text(
+                                                     text = statusText,
+                                                     color = statusColor,
+                                                     fontSize = 11.sp,
+                                                     fontWeight = FontWeight.Bold
+                                                 )
+                                             }
+                                         }
+                                         if (isReady) {
+                                             Icon(Icons.Default.ChevronRight, null, tint = Color.White.copy(alpha = 0.3f))
+                                         }
+                                     }
+                                 }
+                             }
                         }
                     }
                 }

@@ -34,6 +34,7 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
     val focusViewModel: FocusViewModel = viewModel()
     val leaderboardViewModel: LeaderboardViewModel = viewModel()
     val mindMapViewModel: MindMapViewModel = viewModel(factory = ViewModelFactory(RetrofitClient.instance))
+    val userAccountViewModel: UserAccountViewModel = viewModel()
     var selectedLessonId by remember { mutableStateOf<String?>(null) }
     var displayName by remember { mutableStateOf(initialDisplayName) }
     var inboxBootstrapped by remember { mutableStateOf(false) }
@@ -161,8 +162,14 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
                     chatViewModel.loadConversationsFromBackend()
                 }
             }
+            LaunchedEffect(RetrofitClient.authToken) {
+                if (!RetrofitClient.authToken.isNullOrBlank()) {
+                    userAccountViewModel.loadProfile()
+                }
+            }
             ChatScreen(
-                userDisplayName = displayName,
+                userDisplayName = userAccountViewModel.user?.fullName ?: displayName,
+                userAvatar = userAccountViewModel.user?.avatar,
                 quizViewModel = quizViewModel,
                 studyPlanViewModel = studyViewModel,
                 onProfileClick = { navController.navigate("account") },
@@ -367,7 +374,8 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
                 onChangePassword = { navController.navigate("change_password") },
                 onLogout = {
                     forceLogin()
-                }
+                },
+                viewModel = userAccountViewModel
             )
         }
         composable("change_password") {

@@ -26,9 +26,18 @@ class DailySessionViewModel : ViewModel() {
     var reviewModeActive by mutableStateOf(false)
 
     fun loadDailySession() {
+        currentStep = 0
+        correctCount = 0
+        isFinished = false
+        wasAlreadyCompleted = false
+        selectedOption = null
+        showFeedback = false
+        userAnswers.clear()
+        reviewModeActive = false
+        errorMessage = null
+
         viewModelScope.launch {
             loading = true
-            errorMessage = null
             try {
                 val response = RetrofitClient.instance.getDailySession()
                 if (response.isSuccessful) {
@@ -36,6 +45,8 @@ class DailySessionViewModel : ViewModel() {
                     session = s
                     if (s?.status == "COMPLETED") {
                         wasAlreadyCompleted = true
+                    } else {
+                        wasAlreadyCompleted = false
                     }
                 } else {
                     errorMessage = "Failed to load session: ${response.code()}"

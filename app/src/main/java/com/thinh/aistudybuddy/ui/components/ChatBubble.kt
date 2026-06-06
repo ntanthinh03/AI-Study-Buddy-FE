@@ -57,6 +57,17 @@ fun ChatBubble(
             Spacer(modifier = Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
+                val isStudyPlanMessage = message.showStudyPlanButton || message.artifactType == "STUDY_PLAN" ||
+                    message.text.contains("study plan", ignoreCase = true) ||
+                    message.text.contains("week 1", ignoreCase = true) ||
+                    message.text.contains("week 2", ignoreCase = true) ||
+                    message.text.contains("week 3", ignoreCase = true) ||
+                    message.text.contains("week 4", ignoreCase = true)
+                val displayText = when {
+                    isStudyPlanMessage -> "Study plan is ready."
+                    else -> message.text
+                }
+
                 if (message.isProcessing) {
                     Row(
                         modifier = Modifier
@@ -88,13 +99,13 @@ fun ChatBubble(
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = message.text,
+                            text = displayText,
                             color = Color.White,
                             fontSize = 16.sp,
                             lineHeight = 24.sp,
                             modifier = Modifier.weight(1f)
                         )
-                        IconButton(onClick = { onSpeakClick(message.text) }) {
+                        IconButton(onClick = { onSpeakClick(displayText) }) {
                             Icon(Icons.AutoMirrored.Filled.VolumeUp, null, tint = Color.Gray, modifier = Modifier.size(18.dp))
                         }
                     }
@@ -231,7 +242,7 @@ fun ChatBubble(
                     }
                 }
 
-                if (message.showStudyPlanButton) {
+                if (isStudyPlanMessage) {
                     Spacer(modifier = Modifier.height(12.dp))
                     if (message.courses.isNotEmpty()) {
                         Column(

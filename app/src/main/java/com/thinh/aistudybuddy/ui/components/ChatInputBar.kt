@@ -10,6 +10,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicNone
 import androidx.compose.material3.*
@@ -30,6 +31,7 @@ fun ChatInputBar(
     inputText: String,
     pendingAttachmentName: String?,
     isListening: Boolean = false,
+    isImage: Boolean = false,
     onInputTextChange: (String) -> Unit,
     onSendMessageClick: () -> Unit,
     onRemoveAttachment: () -> Unit,
@@ -54,7 +56,12 @@ fun ChatInputBar(
                     .padding(horizontal = 10.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Default.Description, contentDescription = null, tint = PrimaryNeonTeal, modifier = Modifier.size(16.dp))
+                Icon(
+                    imageVector = if (isImage) Icons.Default.Image else Icons.Default.Description,
+                    contentDescription = null,
+                    tint = PrimaryNeonTeal,
+                    modifier = Modifier.size(16.dp)
+                )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = pendingAttachmentName,

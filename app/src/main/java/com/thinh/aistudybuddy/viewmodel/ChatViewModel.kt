@@ -67,6 +67,11 @@ class ChatViewModel : ViewModel() {
     var pendingPdfName by mutableStateOf<String?>(null)
         private set
     private var pendingPdfUri: Uri? = null
+
+    var pendingImageName by mutableStateOf<String?>(null)
+        private set
+    private var pendingImageUri: Uri? = null
+
     var uploadStatusLabel by mutableStateOf<String?>(null)
         private set
     var uploadTerminalStatus by mutableStateOf<String?>(null)
@@ -216,6 +221,30 @@ class ChatViewModel : ViewModel() {
         pendingPdfUri = null
         pendingPdfName = null
     }
+
+    fun setPendingImage(uri: Uri, fileName: String) {
+        pendingImageUri = uri
+        pendingImageName = fileName
+    }
+
+    fun clearPendingImage() {
+        pendingImageUri = null
+        pendingImageName = null
+    }
+
+    fun sendMessageWithPendingImage(context: Context, text: String) {
+        val imageUri = pendingImageUri ?: return
+        val questionText = text.ifBlank { "Explain this image" }
+        if (!RetrofitClient.hasUsableAuthToken()) {
+            RetrofitClient.logAuthTokenDiagnostics("Blocked protected ask-image call: token missing or expired")
+            errorMessage = "Missing or expired token. Please log in again."
+            sessionExpired = true
+            return  // Don't clear the attachment — user keeps it and can retry after login
+        }
+        clearPendingImage()
+        sendImageQuestion(context, imageUri, questionText)
+    }
+
 
     fun sendMessageWithPendingPdf(context: Context, text: String) {
         val pdfUri = pendingPdfUri ?: return
@@ -713,7 +742,14 @@ class ChatViewModel : ViewModel() {
         return created
     }
 
-    private fun appendUserMessage(convId: String, text: String, attachmentName: String? = null) {
+    private fun appendUserMessage(
+        convId: String,
+        text: String,
+        attachmentName: String? = null,
+        imageBase64: String? = null,
+        imageMimeType: String? = null,
+        imageOriginalName: String? = null
+    ) {
         val index = _conversations.indexOfFirst { it.id == convId }
         if (index == -1) return
         val updatedConv = _conversations[index]
@@ -723,6 +759,9 @@ class ChatViewModel : ViewModel() {
                 text = text,
                 isUser = true,
                 attachmentName = attachmentName,
+                imageBase64 = imageBase64,
+                imageMimeType = imageMimeType,
+                imageOriginalName = imageOriginalName,
                 createdAt = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
             )
         )
@@ -962,6 +1001,7 @@ class ChatViewModel : ViewModel() {
                     showMindMapButton = showMindMap,
                     artifactType = askResponse.artifactType,
                     artifactJson = askResponse.artifactData,
+                    planJson = if (showPlan) askResponse.artifactData?.toString() else null,
                     documentId = updatedConv.documentId
                 )
             )
@@ -1821,7 +1861,9 @@ class ChatViewModel : ViewModel() {
     private fun List<BackendChatMessage>.toUiMessages(targetConversationId: String? = null): List<ChatMessage> {
         val messages = mutableListOf<ChatMessage>()
         val convIdToUse = targetConversationId ?: activeConversationId
-        val docIdToUse = _conversations.find { it.id == convIdToUse }?.documentId
+        val conversation = _conversations.find { it.id == convIdToUse }
+        val docIdToUse = conversation?.documentId
+        val localMessages = conversation?.chatMessages.orEmpty()
 
 
 
@@ -1899,14 +1941,21 @@ class ChatViewModel : ViewModel() {
                 return@forEach
             }
             if (item.question.isNotBlank()) {
+                val localAttachment = localMessages.firstOrNull {
+                    it.isUser && it.text == item.question && !it.attachmentName.isNullOrBlank()
+                }
+                val localImage = localMessages.firstOrNull {
+                    it.isUser && it.text == item.question && !it.imageMimeType.isNullOrBlank()
+                }
                 messages.add(
                     ChatMessage(
                         id = "hist-user-${item.id}",
                         text = item.question,
                         isUser = true,
-                        imageMimeType = item.imageMimeType,
-                        imageOriginalName = item.imageOriginalName,
-                        attachmentName = item.attachmentName,
+                        attachmentName = item.attachmentName ?: localAttachment?.attachmentName,
+                        imageBase64 = null,
+                        imageMimeType = item.imageMimeType ?: localImage?.imageMimeType,
+                        imageOriginalName = item.imageOriginalName ?: localImage?.imageOriginalName,
                         documentId = docIdToUse,
                         createdAt = item.createdAt
                     )
@@ -1914,15 +1963,19 @@ class ChatViewModel : ViewModel() {
             }
             if (item.answer.isNotBlank()) {
                 val answerText = item.answer.trim()
+                val isStudyPlan = artifactType == "STUDY_PLAN" || looksLikeStudyPlanAnswer(answerText)
                 
                 val hasAlreadyAddedQuiz = messages.any { it.showQuizButton && it.id.contains(item.id) }
                 
                 messages.add(
                     ChatMessage(
                         id = "hist-ai-${item.id}",
-                        text = answerText,
+                        text = if (isStudyPlan) "Study plan is ready." else answerText,
                         isUser = false,
-                        showFlashcardButton = docIdToUse != null,
+                        showStudyPlanButton = isStudyPlan,
+                        showFlashcardButton = artifactType == "FLASHCARDS",
+                        artifactType = if (isStudyPlan) "STUDY_PLAN" else item.artifactType,
+                        planJson = if (isStudyPlan) item.artifactJson?.toString() else null,
                         documentId = docIdToUse,
                         createdAt = item.createdAt
                     )
@@ -1939,6 +1992,14 @@ class ChatViewModel : ViewModel() {
         if (numberedQuestions.findAll(answer).count() >= 2) return true
         val optionLines = Regex("""(?m)^\s*[a-dA-D]\)\s+.+""")
         return optionLines.findAll(answer).count() >= 4
+    }
+
+    private fun looksLikeStudyPlanAnswer(answer: String): Boolean {
+        val normalized = answer.lowercase()
+        if (normalized.contains("study plan")) return true
+        if (normalized.contains("week 1") || normalized.contains("week 2") || normalized.contains("week 3") || normalized.contains("week 4")) return true
+        if (normalized.contains("day 1") || normalized.contains("day 2") || normalized.contains("day 3")) return true
+        return normalized.count { it == '\n' } >= 6 && (normalized.contains("monday") || normalized.contains("tuesday") || normalized.contains("wednesday"))
     }
 
     private fun List<ConversationMessage>.toBackendHistory(): List<BackendChatMessage> {
@@ -1981,32 +2042,46 @@ class ChatViewModel : ViewModel() {
                 uploadTerminalStatus = null
                 errorMessage = null
 
-                try {
-                    val conversationForImage = conversationId ?: if (_currentChatType.value == ChatScreenType.NEW_CHAT) {
-                        val newConvId = UUID.randomUUID().toString()
-                        _conversations.add(0, Conversation(newConvId, "", autoTitleApplied = false))
-                        activeConversationId = newConvId
-                        _currentChatType.value = ChatScreenType.CONTINUING_CHAT
-                        newConvId
-                    } else {
-                        activeConversationId
-                    }
+                var conversationForImage = conversationId ?: if (_currentChatType.value == ChatScreenType.NEW_CHAT) {
+                    val newConvId = UUID.randomUUID().toString()
+                    _conversations.add(0, Conversation(newConvId, "", autoTitleApplied = false))
+                    activeConversationId = newConvId
+                    _currentChatType.value = ChatScreenType.CONTINUING_CHAT
+                    newConvId
+                } else {
+                    activeConversationId
+                }
 
-                    appendUserMessage(conversationForImage, question, "image")
+                val contentResolver = context.contentResolver
+                val mimeType = contentResolver.getType(imageUri) ?: "image/jpeg"
+                val fileName = runCatching {
+                    contentResolver.query(imageUri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                        val index = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                        if (index >= 0 && cursor.moveToFirst()) cursor.getString(index) else null
+                    }
+                }.getOrNull() ?: "image.jpg"
+
+                var processingMessageId = ""
+
+                try {
+                    val bytes = contentResolver.openInputStream(imageUri)?.use { it.readBytes() }
+                        ?: throw IllegalArgumentException("Could not read image file.")
+
+                    val localBase64 = android.util.Base64.encodeToString(bytes, android.util.Base64.DEFAULT)
+
+                    appendUserMessage(
+                        convId = conversationForImage,
+                        text = question,
+                        attachmentName = fileName,
+                        imageBase64 = localBase64,
+                        imageMimeType = mimeType,
+                        imageOriginalName = fileName
+                    )
                     persistChatState()
                     logTurn(turnId, "user_sent_image", conversationForImage)
 
-                    val contentResolver = context.contentResolver
-                    val mimeType = contentResolver.getType(imageUri) ?: "image/jpeg"
-                    val fileName = runCatching {
-                        contentResolver.query(imageUri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
-                            val index = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                            if (index >= 0 && cursor.moveToFirst()) cursor.getString(index) else null
-                        }
-                    }.getOrNull() ?: "image.jpg"
-
-                    val bytes = contentResolver.openInputStream(imageUri)?.use { it.readBytes() }
-                        ?: throw IllegalArgumentException("Could not read image file.")
+                    processingMessageId = appendProcessingMessage(conversationForImage, "Analyzing image...")
+                    persistChatState()
 
                     val body = bytes.toRequestBody(mimeType.toMediaTypeOrNull())
                     val imagePart = MultipartBody.Part.createFormData("image", fileName, body)
@@ -2019,7 +2094,18 @@ class ChatViewModel : ViewModel() {
                         title = question.take(48).toRequestBody("text/plain".toMediaTypeOrNull())
                     )
 
+                    // Remove the processing message
+                    if (processingMessageId.isNotBlank()) {
+                        val index = _conversations.indexOfFirst { it.id == conversationForImage }
+                        if (index != -1) {
+                            val updatedConv = _conversations[index]
+                            updatedConv.chatMessages.removeIf { it.id == processingMessageId }
+                            _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages.toMutableList())
+                        }
+                    }
+
                     val resolvedConversationId = rebindConversationId(conversationForImage, response.conversationId)
+                    conversationForImage = resolvedConversationId
 
                     val convIndex = _conversations.indexOfFirst { it.id == resolvedConversationId }
                     if (convIndex != -1 && _conversations[convIndex].title.isBlank()) {
@@ -2035,13 +2121,29 @@ class ChatViewModel : ViewModel() {
 
                     uploadTerminalStatus = "COMPLETED"
                 } catch (e: HttpException) {
+                    if (processingMessageId.isNotBlank()) {
+                        val index = _conversations.indexOfFirst { it.id == conversationForImage }
+                        if (index != -1) {
+                            val updatedConv = _conversations[index]
+                            updatedConv.chatMessages.removeIf { it.id == processingMessageId }
+                            _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages.toMutableList())
+                        }
+                    }
                     uploadTerminalStatus = "FAILED"
                     handleHttpError(e, forceLogoutOn401 = false)
-                    logTurn(turnId, "turn_http_error", conversationId, "code=${e.code()}")
+                    logTurn(turnId, "turn_http_error", conversationForImage, "code=${e.code()}")
                 } catch (e: Exception) {
+                    if (processingMessageId.isNotBlank()) {
+                        val index = _conversations.indexOfFirst { it.id == conversationForImage }
+                        if (index != -1) {
+                            val updatedConv = _conversations[index]
+                            updatedConv.chatMessages.removeIf { it.id == processingMessageId }
+                            _conversations[index] = updatedConv.copy(chatMessages = updatedConv.chatMessages.toMutableList())
+                        }
+                    }
                     uploadTerminalStatus = "FAILED"
                     errorMessage = e.localizedMessage ?: "Failed to process image question."
-                    logTurn(turnId, "turn_error", conversationId, e.javaClass.simpleName)
+                    logTurn(turnId, "turn_error", conversationForImage, e.javaClass.simpleName)
                 } finally {
                     uploadStatusLabel = null
                     isUploading = false

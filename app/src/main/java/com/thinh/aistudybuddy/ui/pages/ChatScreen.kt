@@ -474,6 +474,7 @@ fun ChatScreen(
                                     tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, null)
                                 },
                                 showArtifactButtons = isFirstAiMessage,
+                                // keep these artifact buttons always visible so they dont disappear
                                 showQuizBtn = true,
                                 showFlashcardBtn = true,
                                 showMindMapBtn = true

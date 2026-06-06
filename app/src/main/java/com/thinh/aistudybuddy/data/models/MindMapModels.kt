@@ -14,6 +14,7 @@ data class MindMapResponse(
     val content: List<MindMapNode>,
     val userId: String,
     val documentId: String?,
+    // use string here because gson fails to parse ISO date string and crash the app
     val createdAt: String
 )
 

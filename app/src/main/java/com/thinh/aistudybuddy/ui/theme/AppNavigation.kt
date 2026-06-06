@@ -294,6 +294,7 @@ fun AppNavigation(navController: NavHostController, initialDisplayName: String =
                 userDisplayName = displayName
             )
         }
+        // simplified this route to only use documentId because space/special chars crash android nav
         composable(
             route = "mind_map/{documentId}",
             arguments = listOf(
